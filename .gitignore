@@ -1,0 +1,65 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.dll
+*.exe
+*.pdb
+*.dgspec.json
+*.nuget.g.props
+*.nuget.g.targets
+project.assets.json
+
+## Visual Studio
+.vs/
+*.userprefs
+*.sln.docstates
+
+## Rider
+.idea/
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+
+## NuGet Packages
+*.nupkg
+*.snupkg
+**/packages/*
+
+## Environment files
+.env
+.env.local
+.env.*.local
+appsettings.Development.json
+appsettings.Production.json
+appsettings.json
+
+## Storage
+Storage/
+RetailForecast.API/Storage/
+
+## Node modules (for Web project)
+RetailForecast.Web/node_modules/
+RetailForecast.Web/dist/
+RetailForecast.Web/build/
+
+## Logs
+*.log
+logs/
+
+## OS
+.DS_Store
+Thumbs.db
+
+db_data/
