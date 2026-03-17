@@ -21,5 +21,18 @@ namespace RetailForecast.Data
         {
             modelBuilder.ApplyConfigurationsFromAssembly(typeof(RetailForecastDbContext).Assembly);
         }
+
+        public override async Task<int> SaveChangesAsync(CancellationToken ct = default)
+        {
+            var entries = ChangeTracker.Entries<BaseEntity>()
+                .Where(e => e.State == EntityState.Modified);
+
+            foreach (var entry in entries)
+            {
+                entry.Entity.UpdatedAt = DateTime.UtcNow;
+            }
+
+            return await base.SaveChangesAsync(ct);
+        }
     }
 }

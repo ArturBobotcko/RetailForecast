@@ -15,6 +15,8 @@ builder.Services.AddDbContext<RetailForecastDbContext>(options =>
 
 // Регистрация сервисов
 builder.Services.AddScoped<DatasetService>();
+builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<ModelService>();
 
 var app = builder.Build();
 

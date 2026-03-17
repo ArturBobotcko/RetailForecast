@@ -1,16 +1,18 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using RetailForecast.DTOs.Dataset;
+using RetailForecast.DTOs.User;
 using RetailForecast.Services;
 
 namespace RetailForecast.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class DatasetsController : ControllerBase
+    public class UsersController : ControllerBase
     {
-        private readonly DatasetService _service;
+        private readonly UserService _service;
 
-        public DatasetsController(DatasetService service)
+        public UsersController(UserService service)
         {
             _service = service;
         }
@@ -28,7 +30,7 @@ namespace RetailForecast.Controllers
 
         [HttpPost]
         public async Task<IActionResult> Create(
-            [FromBody] CreateDatasetRequest request, CancellationToken ct)
+            [FromBody] CreateUserRequest request, CancellationToken ct)
         {
             var result = await _service.CreateAsync(request, ct);
             return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
@@ -36,7 +38,7 @@ namespace RetailForecast.Controllers
 
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(
-            int id, [FromBody] UpdateDatasetRequest request, CancellationToken ct)
+            int id, [FromBody] UpdateUserRequest request, CancellationToken ct)
         {
             var result = await _service.UpdateAsync(id, request, ct);
             return result is null ? NotFound() : Ok(result);
