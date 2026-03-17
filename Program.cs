@@ -17,6 +17,10 @@ builder.Services.AddDbContext<RetailForecastDbContext>(options =>
 builder.Services.AddScoped<DatasetService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<ModelService>();
+builder.Services.AddScoped<KpiService>();
+builder.Services.AddScoped<TrainingRunService>();
+builder.Services.AddScoped<ForecastService>();
+builder.Services.AddScoped<TrainingMetricService>();
 
 var app = builder.Build();
 

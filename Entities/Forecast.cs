@@ -4,7 +4,7 @@
     {
         public int Horizon { get; set; }
 
-        public int TrainingRunId { get; private set; }
+        public int TrainingRunId { get; set; }
         public TrainingRun TrainingRun { get; private set; } = null!;
 
         public ICollection<ForecastValue> ForecastValues { get; private set; } = [];

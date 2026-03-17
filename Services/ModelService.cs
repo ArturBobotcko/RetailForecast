@@ -42,6 +42,9 @@ namespace RetailForecast.Services
         public async Task<ModelResponse> CreateAsync(
             CreateModelRequest request, CancellationToken ct = default)
         {
+            if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Algorithm))
+                throw new ArgumentException("Name and Algorithm are required");
+
             var model = new Model
             {
                 Name = request.Name,
@@ -61,13 +64,21 @@ namespace RetailForecast.Services
         public async Task<ModelResponse?> UpdateAsync(
             int id, UpdateModelRequest request, CancellationToken ct = default)
         {
+            if (string.IsNullOrWhiteSpace(request.Name) && string.IsNullOrWhiteSpace(request.Algorithm) && string.IsNullOrWhiteSpace(request.Description))
+                return null;
+
             var model = await _context.Models.FindAsync([id], ct);
 
             if (model is null) return null;
 
-            model.Name = request.Name;
-            model.Algorithm = request.Algorithm;
-            model.Description = request.Description;
+            if (!string.IsNullOrWhiteSpace(request.Name))
+                model.Name = request.Name;
+
+            if (!string.IsNullOrWhiteSpace(request.Algorithm))
+                model.Algorithm = request.Algorithm;
+
+            if (!string.IsNullOrWhiteSpace(request.Description))
+                model.Description = request.Description;
 
             await _context.SaveChangesAsync(ct);
 
@@ -84,6 +95,7 @@ namespace RetailForecast.Services
             if (model is null) return false;
 
             _context.Models.Remove(model);
+            await _context.SaveChangesAsync(ct);
 
             return true;
         }

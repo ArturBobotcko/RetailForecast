@@ -45,6 +45,13 @@ namespace RetailForecast.Services
         public async Task<DatasetResponse> CreateAsync(
             CreateDatasetRequest request, CancellationToken ct = default)
         {
+            if (string.IsNullOrWhiteSpace(request.OriginalFileName) || request.UserId <= 0)
+                throw new ArgumentException("OriginalFileName and valid UserId are required");
+
+            var user = await _context.Users.FindAsync([request.UserId], ct);
+            if (user is null)
+                throw new InvalidOperationException("User not found");
+
             var dataset = new Dataset
             {
                 OriginalFileName = request.OriginalFileName,
@@ -65,6 +72,9 @@ namespace RetailForecast.Services
         public async Task<DatasetResponse?> UpdateAsync(
             int id, UpdateDatasetRequest request, CancellationToken ct = default)
         {
+            if (string.IsNullOrWhiteSpace(request.OriginalFileName))
+                return null;
+
             var dataset = await _context.Datasets.FindAsync([id], ct);
 
             if (dataset is null) return null;

@@ -1,17 +1,16 @@
-﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using RetailForecast.DTOs.Model;
+using RetailForecast.DTOs.TrainingMetric;
 using RetailForecast.Services;
 
 namespace RetailForecast.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class ModelsController : ControllerBase
+    public class TrainingMetricsController : ControllerBase
     {
-        private readonly ModelService _service;
+        private readonly TrainingMetricService _service;
 
-        public ModelsController(ModelService service)
+        public TrainingMetricsController(TrainingMetricService service)
         {
             _service = service;
         }
@@ -29,28 +28,32 @@ namespace RetailForecast.Controllers
 
         [HttpPost]
         public async Task<IActionResult> Create(
-            [FromBody] CreateModelRequest request, CancellationToken ct)
+            [FromBody] CreateTrainingMetricRequest request, CancellationToken ct)
         {
             try
             {
                 var result = await _service.CreateAsync(request, ct);
-                return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+                return result is null ? BadRequest(new { message = "Invalid request" }) : CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
             }
             catch (ArgumentException ex)
             {
                 return BadRequest(new { message = ex.Message });
             }
+            catch (InvalidOperationException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
         }
 
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(
-            int id, [FromBody] UpdateModelRequest request, CancellationToken ct)
+            int id, [FromBody] UpdateTrainingMetricRequest request, CancellationToken ct)
         {
             try
             {
                 var result = await _service.UpdateAsync(id, request, ct);
                 if (result is null)
-                    return NotFound(new { message = "Model not found or no fields to update" });
+                    return NotFound(new { message = "TrainingMetric not found or no fields to update" });
                 return Ok(result);
             }
             catch (ArgumentException ex)

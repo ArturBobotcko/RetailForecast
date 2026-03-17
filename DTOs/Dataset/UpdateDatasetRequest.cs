@@ -5,6 +5,6 @@ using System.Text;
 namespace RetailForecast.DTOs.Dataset
 {
     public record UpdateDatasetRequest(
-        string OriginalFileName
+        string? OriginalFileName = null
     );
 }

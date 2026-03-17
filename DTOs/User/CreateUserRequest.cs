@@ -2,6 +2,6 @@
 {
     public record CreateUserRequest(
         string Email,
-        string PasswordHash
+        string Password
     );
 }

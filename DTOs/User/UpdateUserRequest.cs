@@ -1,7 +1,7 @@
 ﻿namespace RetailForecast.DTOs.User
 {
     public record UpdateUserRequest(
-        string Email,
-        string PasswordHash
+        string? Email = null,
+        string? Password = null
     );
 }

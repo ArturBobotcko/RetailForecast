@@ -32,16 +32,40 @@ namespace RetailForecast.Controllers
         public async Task<IActionResult> Create(
             [FromBody] CreateUserRequest request, CancellationToken ct)
         {
-            var result = await _service.CreateAsync(request, ct);
-            return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+            try
+            {
+                var result = await _service.CreateAsync(request, ct);
+                return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
         }
 
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(
             int id, [FromBody] UpdateUserRequest request, CancellationToken ct)
         {
-            var result = await _service.UpdateAsync(id, request, ct);
-            return result is null ? NotFound() : Ok(result);
+            try
+            {
+                var result = await _service.UpdateAsync(id, request, ct);
+                if (result is null)
+                    return NotFound(new { message = "User not found or no fields to update" });
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
         }
 
         [HttpDelete("{id}")]
