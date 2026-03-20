@@ -11,10 +11,12 @@ namespace RetailForecast.Services
     public class UserService
     {
         private readonly RetailForecastDbContext _context;
+        private readonly JwtService _jwtService;
 
-        public UserService(RetailForecastDbContext context)
+        public UserService(RetailForecastDbContext context, JwtService jwtService)
         {
             _context = context;
+            _jwtService = jwtService;
         }
 
         private static string HashPassword(string password)
@@ -155,6 +157,25 @@ namespace RetailForecast.Services
             await _context.SaveChangesAsync(ct);
 
             return true;
+        }
+
+        public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+                throw new ArgumentException("Email and password are required");
+
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email == request.Email, ct);
+            
+            if (user is null)
+                throw new UnauthorizedAccessException("Invalid email or password");
+
+            if (!VerifyPassword(request.Password, user.PasswordHash ?? ""))
+                throw new UnauthorizedAccessException("Invalid email or password");
+
+            var token = _jwtService.GenerateToken(user);
+
+            return new AuthResponse(user.Id, user.Email, token);
         }
 
         private static bool IsValidEmail(string email)

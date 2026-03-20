@@ -17,6 +17,25 @@ namespace RetailForecast.Controllers
             _service = service;
         }
 
+        [HttpPost("login")]
+        public async Task<IActionResult> Login(
+            [FromBody] LoginRequest request, CancellationToken ct)
+        {
+            try
+            {
+                var result = await _service.LoginAsync(request, ct);
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetAll(CancellationToken ct)
             => Ok(await _service.GetAllAsync(ct));
