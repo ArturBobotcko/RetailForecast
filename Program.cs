@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using RetailForecast.Data;
 using RetailForecast.Services;
+using RetailForecast.Settings;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -51,8 +52,12 @@ builder.Services.AddDbContext<RetailForecastDbContext>(options =>
         .GetConnectionString("DefaultConnection"))
            .UseSnakeCaseNamingConvention());
 
+// Register configuration
+builder.Services.Configure<FileUploadSettings>(builder.Configuration.GetSection("FileUploadSettings"));
+
 // Register services
 builder.Services.AddScoped<JwtService>();
+builder.Services.AddScoped<FileStorageService>();
 builder.Services.AddScoped<DatasetService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<ModelService>();
