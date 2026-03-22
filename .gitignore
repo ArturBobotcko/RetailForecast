@@ -46,8 +46,7 @@ appsettings.Production.json
 appsettings.json
 
 ## Storage
-Storage/
-RetailForecast.API/Storage/
+/uploads
 
 ## Node modules (for Web project)
 RetailForecast.Web/node_modules/
