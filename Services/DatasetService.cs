@@ -21,10 +21,11 @@ namespace RetailForecast.Services
             _logger = logger;
         }
 
-        public async Task<List<DatasetResponse>> GetAllAsync(CancellationToken ct = default)
+        public async Task<List<DatasetResponse>> GetAllAsync(int userId, CancellationToken ct = default)
         {
             return await _context.Datasets
                 .AsNoTracking()
+                .Where(d => d.UserId == userId)
                 .Select(d => new DatasetResponse(
                     d.Id,
                     d.OriginalFileName,
@@ -38,11 +39,11 @@ namespace RetailForecast.Services
                 .ToListAsync(ct);
         }
 
-        public async Task<DatasetResponse?> GetByIdAsync(int id, CancellationToken ct = default)
+        public async Task<DatasetResponse?> GetByIdAsync(int id, int userId, CancellationToken ct = default)
         {
             var dataset = await _context.Datasets
                 .AsNoTracking()
-                .FirstOrDefaultAsync(d => d.Id == id, ct);
+                .FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId, ct);
 
             if (dataset is null) return null;
 
@@ -93,9 +94,9 @@ namespace RetailForecast.Services
         }
 
         public async Task<DatasetResponse?> UpdateAsync(
-            int id, UpdateDatasetRequest request, CancellationToken ct = default)
+            int id, int userId, UpdateDatasetRequest request, CancellationToken ct = default)
         {
-            var dataset = await _context.Datasets.FindAsync([id], ct);
+            var dataset = await _context.Datasets.FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId, ct);
 
             if (dataset is null) return null;
 
@@ -112,12 +113,13 @@ namespace RetailForecast.Services
 
         public async Task<DatasetResponse?> ReplaceFileAsync(
             int id,
+            int userId,
             IFormFile file,
             string? originalFileName,
             string? description,
             CancellationToken ct = default)
         {
-            var dataset = await _context.Datasets.FindAsync([id], ct);
+            var dataset = await _context.Datasets.FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId, ct);
             if (dataset is null) return null;
 
             var resolvedOriginalFileName = !string.IsNullOrWhiteSpace(originalFileName)
@@ -154,9 +156,9 @@ namespace RetailForecast.Services
             return MapResponse(dataset);
         }
 
-        public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)
+        public async Task<bool> DeleteAsync(int id, int userId, CancellationToken ct = default)
         {
-            var dataset = await _context.Datasets.FindAsync([id], ct);
+            var dataset = await _context.Datasets.FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId, ct);
 
             if (dataset is null) return false;
 

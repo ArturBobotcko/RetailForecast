@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using ExcelDataReader;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -31,13 +32,21 @@ namespace RetailForecast.Controllers
         [HttpGet]
         [Authorize]
         public async Task<IActionResult> GetAll(CancellationToken ct)
-            => Ok(await _service.GetAllAsync(ct));
+        {
+            if (!TryGetCurrentUserId(out var userId))
+                return Unauthorized(new { message = "Invalid user token" });
+
+            return Ok(await _service.GetAllAsync(userId, ct));
+        }
 
         [HttpGet("{id}")]
         [Authorize]
         public async Task<IActionResult> GetById(int id, CancellationToken ct)
         {
-            var result = await _service.GetByIdAsync(id, ct);
+            if (!TryGetCurrentUserId(out var userId))
+                return Unauthorized(new { message = "Invalid user token" });
+
+            var result = await _service.GetByIdAsync(id, userId, ct);
             return result is null ? NotFound() : Ok(result);
         }
 
@@ -47,13 +56,12 @@ namespace RetailForecast.Controllers
         {
             try
             {
+                if (!TryGetCurrentUserId(out var userId))
+                    return Unauthorized(new { message = "Invalid user token" });
+
                 var file = Request.Form.Files.FirstOrDefault();
                 var description = Request.Form["description"].FirstOrDefault();
                 var originalFileName = Request.Form["originalFileName"].FirstOrDefault();
-                var userIdString = Request.Form["userId"].FirstOrDefault();
-
-                if (!int.TryParse(userIdString, out var userId))
-                    return BadRequest(new { message = "Valid UserId is required" });
 
                 var request = new CreateDatasetRequest(
                     File: file,
@@ -85,6 +93,9 @@ namespace RetailForecast.Controllers
         {
             try
             {
+                if (!TryGetCurrentUserId(out var userId))
+                    return Unauthorized(new { message = "Invalid user token" });
+
                 var file = Request.Form.Files.FirstOrDefault();
                 var description = Request.Form["description"].FirstOrDefault();
                 var originalFileName = Request.Form["originalFileName"].FirstOrDefault();
@@ -92,7 +103,7 @@ namespace RetailForecast.Controllers
                 if (file == null || file.Length == 0)
                     return BadRequest(new { message = "No file provided" });
 
-                var result = await _service.ReplaceFileAsync(id, file, originalFileName, description, ct);
+                var result = await _service.ReplaceFileAsync(id, userId, file, originalFileName, description, ct);
                 if (result == null)
                     return NotFound(new { message = "Dataset not found" });
 
@@ -115,7 +126,10 @@ namespace RetailForecast.Controllers
         {
             try
             {
-                var dataset = await _service.GetByIdAsync(id, ct);
+                if (!TryGetCurrentUserId(out var userId))
+                    return Unauthorized(new { message = "Invalid user token" });
+
+                var dataset = await _service.GetByIdAsync(id, userId, ct);
                 if (dataset == null)
                     return NotFound(new { message = "Dataset not found" });
 
@@ -146,7 +160,10 @@ namespace RetailForecast.Controllers
         {
             try
             {
-                var result = await _service.UpdateAsync(id, request, ct);
+                if (!TryGetCurrentUserId(out var userId))
+                    return Unauthorized(new { message = "Invalid user token" });
+
+                var result = await _service.UpdateAsync(id, userId, request, ct);
                 if (result is null)
                     return NotFound(new { message = "Dataset not found or no fields to update" });
                 return Ok(result);
@@ -167,7 +184,10 @@ namespace RetailForecast.Controllers
         {
             try
             {
-                var dataset = await _service.GetByIdAsync(id, ct);
+                if (!TryGetCurrentUserId(out var userId))
+                    return Unauthorized(new { message = "Invalid user token" });
+
+                var dataset = await _service.GetByIdAsync(id, userId, ct);
                 if (dataset == null)
                     return NotFound(new { message = "Dataset not found" });
 
@@ -428,13 +448,22 @@ namespace RetailForecast.Controllers
             return datasetName;
         }
 
+        private bool TryGetCurrentUserId(out int userId)
+        {
+            userId = 0;
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            return int.TryParse(userIdClaim, out userId);
+        }
+
         [HttpDelete("{id}")]
         [Authorize]
         public async Task<IActionResult> Delete(int id, CancellationToken ct)
         {
-            var deleted = await _service.DeleteAsync(id, ct);
+            if (!TryGetCurrentUserId(out var userId))
+                return Unauthorized(new { message = "Invalid user token" });
+
+            var deleted = await _service.DeleteAsync(id, userId, ct);
             return deleted ? NoContent() : NotFound();
         }
     }
 }
-
