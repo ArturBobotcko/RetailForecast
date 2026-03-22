@@ -3,6 +3,7 @@
     public record UserResponse(
         int Id,
         string Email,
-        DateTime CreatedAt
+        DateTime CreatedAt,
+        DateTime UpdatedAt
     );
 }

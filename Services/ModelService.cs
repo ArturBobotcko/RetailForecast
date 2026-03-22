@@ -21,7 +21,10 @@ namespace RetailForecast.Services
                 .Select(m => new ModelResponse(
                     m.Id,
                     m.Name,
-                    m.Description
+                    m.Algorithm,
+                    m.Description,
+                    m.CreatedAt,
+                    m.UpdatedAt
                     ))
                 .ToListAsync(ct);
         }
@@ -36,7 +39,10 @@ namespace RetailForecast.Services
             return new ModelResponse(
                 model.Id,
                 model.Name,
-                model.Description);
+                model.Algorithm,
+                model.Description,
+                model.CreatedAt,
+                model.UpdatedAt);
         }
 
         public async Task<ModelResponse> CreateAsync(
@@ -58,7 +64,10 @@ namespace RetailForecast.Services
             return new ModelResponse(
                 model.Id,
                 model.Name,
-                model.Description);
+                model.Algorithm,
+                model.Description,
+                model.CreatedAt,
+                model.UpdatedAt);
         }
 
         public async Task<ModelResponse?> UpdateAsync(
@@ -85,7 +94,10 @@ namespace RetailForecast.Services
             return new ModelResponse(
                 model.Id,
                 model.Name,
-                model.Description);
+                model.Algorithm,
+                model.Description,
+                model.CreatedAt,
+                model.UpdatedAt);
         }
 
         public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)

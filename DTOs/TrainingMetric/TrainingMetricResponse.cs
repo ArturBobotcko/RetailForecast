@@ -5,6 +5,7 @@ namespace RetailForecast.DTOs.TrainingMetric
         string Name,
         double Value,
         int TrainingRunId,
-        DateTime CreatedAt
+        DateTime CreatedAt,
+        DateTime UpdatedAt
     );
 }

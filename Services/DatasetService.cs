@@ -23,6 +23,7 @@ namespace RetailForecast.Services
                     d.Id,
                     d.OriginalFileName,
                     d.CreatedAt,
+                    d.UpdatedAt,
                     d.UserId))
                 .ToListAsync(ct);
         }
@@ -39,6 +40,7 @@ namespace RetailForecast.Services
                 dataset.Id,
                 dataset.OriginalFileName,
                 dataset.CreatedAt,
+                dataset.UpdatedAt,
                 dataset.UserId);
         }
 
@@ -66,6 +68,7 @@ namespace RetailForecast.Services
                 dataset.Id,
                 dataset.OriginalFileName,
                 dataset.CreatedAt,
+                dataset.UpdatedAt,
                 dataset.UserId);
         }
 
@@ -86,6 +89,7 @@ namespace RetailForecast.Services
                 dataset.Id,
                 dataset.OriginalFileName,
                 dataset.CreatedAt,
+                dataset.UpdatedAt,
                 dataset.UserId);
         }
 

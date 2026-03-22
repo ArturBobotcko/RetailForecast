@@ -23,7 +23,8 @@ namespace RetailForecast.Services
                     tm.Name,
                     tm.Value,
                     tm.TrainingRunId,
-                    tm.CreatedAt))
+                    tm.CreatedAt,
+                    tm.UpdatedAt))
                 .ToListAsync(ct);
         }
 
@@ -38,7 +39,8 @@ namespace RetailForecast.Services
                 metric.Name,
                 metric.Value,
                 metric.TrainingRunId,
-                metric.CreatedAt);
+                metric.CreatedAt,
+                metric.UpdatedAt);
         }
 
         public async Task<TrainingMetricResponse?> CreateAsync(
@@ -69,7 +71,8 @@ namespace RetailForecast.Services
                 metric.Name,
                 metric.Value,
                 metric.TrainingRunId,
-                metric.CreatedAt);
+                metric.CreatedAt,
+                metric.UpdatedAt);
         }
 
         public async Task<TrainingMetricResponse?> UpdateAsync(
@@ -99,7 +102,8 @@ namespace RetailForecast.Services
                 metric.Name,
                 metric.Value,
                 metric.TrainingRunId,
-                metric.CreatedAt);
+                metric.CreatedAt,
+                metric.UpdatedAt);
         }
 
         public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)

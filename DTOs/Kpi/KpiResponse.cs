@@ -5,6 +5,7 @@ namespace RetailForecast.DTOs.Kpi
         string Name,
         string DataType,
         int DatasetId,
-        DateTime CreatedAt
+        DateTime CreatedAt,
+        DateTime UpdatedAt
     );
 }

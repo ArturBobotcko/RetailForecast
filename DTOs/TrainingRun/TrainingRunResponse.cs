@@ -8,6 +8,7 @@ namespace RetailForecast.DTOs.TrainingRun
         string Status,
         int DatasetId,
         int ModelId,
-        DateTime CreatedAt
+        DateTime CreatedAt,
+        DateTime UpdatedAt
     );
 }

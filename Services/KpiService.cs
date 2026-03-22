@@ -23,7 +23,8 @@ namespace RetailForecast.Services
                     k.Name,
                     k.DataType,
                     k.DatasetId,
-                    k.CreatedAt))
+                    k.CreatedAt,
+                    k.UpdatedAt))
                 .ToListAsync(ct);
         }
 
@@ -38,7 +39,8 @@ namespace RetailForecast.Services
                 kpi.Name,
                 kpi.DataType,
                 kpi.DatasetId,
-                kpi.CreatedAt);
+                kpi.CreatedAt,
+                kpi.UpdatedAt);
         }
 
         public async Task<KpiResponse?> CreateAsync(
@@ -66,7 +68,8 @@ namespace RetailForecast.Services
                 kpi.Name,
                 kpi.DataType,
                 kpi.DatasetId,
-                kpi.CreatedAt);
+                kpi.CreatedAt,
+                kpi.UpdatedAt);
         }
 
         public async Task<KpiResponse?> UpdateAsync(
@@ -92,7 +95,8 @@ namespace RetailForecast.Services
                 kpi.Name,
                 kpi.DataType,
                 kpi.DatasetId,
-                kpi.CreatedAt);
+                kpi.CreatedAt,
+                kpi.UpdatedAt);
         }
 
         public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)

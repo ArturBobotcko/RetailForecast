@@ -22,7 +22,8 @@ namespace RetailForecast.Services
                     f.Id,
                     f.Horizon,
                     f.TrainingRunId,
-                    f.CreatedAt))
+                    f.CreatedAt,
+                    f.UpdatedAt))
                 .ToListAsync(ct);
         }
 
@@ -36,7 +37,8 @@ namespace RetailForecast.Services
                 forecast.Id,
                 forecast.Horizon,
                 forecast.TrainingRunId,
-                forecast.CreatedAt);
+                forecast.CreatedAt,
+                forecast.UpdatedAt);
         }
 
         public async Task<ForecastResponse?> CreateAsync(
@@ -62,7 +64,8 @@ namespace RetailForecast.Services
                 forecast.Id,
                 forecast.Horizon,
                 forecast.TrainingRunId,
-                forecast.CreatedAt);
+                forecast.CreatedAt,
+                forecast.UpdatedAt);
         }
 
         public async Task<ForecastResponse?> UpdateAsync(
@@ -86,7 +89,8 @@ namespace RetailForecast.Services
                 forecast.Id,
                 forecast.Horizon,
                 forecast.TrainingRunId,
-                forecast.CreatedAt);
+                forecast.CreatedAt,
+                forecast.UpdatedAt);
         }
 
         public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)

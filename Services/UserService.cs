@@ -63,7 +63,8 @@ namespace RetailForecast.Services
                 .Select(u => new UserResponse(
                     u.Id,
                     u.Email,
-                    u.CreatedAt))
+                    u.CreatedAt,
+                    u.UpdatedAt))
                 .ToListAsync(ct);
         }
 
@@ -76,7 +77,8 @@ namespace RetailForecast.Services
             return new UserResponse(
                 user.Id,
                 user.Email,
-                user.CreatedAt);
+                user.CreatedAt,
+                user.UpdatedAt);
         }
 
         public async Task<UserResponse> CreateAsync(
@@ -106,7 +108,8 @@ namespace RetailForecast.Services
             return new UserResponse(
                 user.Id,
                 user.Email,
-                user.CreatedAt);
+                user.CreatedAt,
+                user.UpdatedAt);
         }
 
 
@@ -144,7 +147,8 @@ namespace RetailForecast.Services
             return new UserResponse(
                 user.Id,
                 user.Email,
-                user.CreatedAt);
+                user.CreatedAt,
+                user.UpdatedAt);
         }
 
         public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)

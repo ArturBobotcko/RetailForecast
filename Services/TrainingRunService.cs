@@ -27,7 +27,8 @@ namespace RetailForecast.Services
                     tr.Status.ToString(),
                     tr.DatasetId,
                     tr.ModelId,
-                    tr.CreatedAt))
+                    tr.CreatedAt,
+                    tr.UpdatedAt))
                 .ToListAsync(ct);
         }
 
@@ -47,7 +48,8 @@ namespace RetailForecast.Services
                 trainingRun.Status.ToString(),
                 trainingRun.DatasetId,
                 trainingRun.ModelId,
-                trainingRun.CreatedAt);
+                trainingRun.CreatedAt,
+                trainingRun.UpdatedAt);
         }
 
         public async Task<TrainingRunResponse?> CreateAsync(
@@ -92,7 +94,8 @@ namespace RetailForecast.Services
                 trainingRun.Status.ToString(),
                 trainingRun.DatasetId,
                 trainingRun.ModelId,
-                trainingRun.CreatedAt);
+                trainingRun.CreatedAt,
+                trainingRun.UpdatedAt);
         }
 
         public async Task<TrainingRunResponse?> UpdateAsync(
@@ -129,7 +132,8 @@ namespace RetailForecast.Services
                 trainingRun.Status.ToString(),
                 trainingRun.DatasetId,
                 trainingRun.ModelId,
-                trainingRun.CreatedAt);
+                trainingRun.CreatedAt,
+                trainingRun.UpdatedAt);
         }
 
         public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)

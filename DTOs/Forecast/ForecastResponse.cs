@@ -4,6 +4,7 @@ namespace RetailForecast.DTOs.Forecast
         int Id,
         int Horizon,
         int TrainingRunId,
-        DateTime CreatedAt
+        DateTime CreatedAt,
+        DateTime UpdatedAt
     );
 }
