@@ -1,5 +1,7 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using ExcelDataReader;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.VisualBasic.FileIO;
 using RetailForecast.DTOs.Dataset;
 using RetailForecast.Services;
 
@@ -9,6 +11,9 @@ namespace RetailForecast.Controllers
     [ApiController]
     public class DatasetsController : ControllerBase
     {
+        private const int DefaultPreviewRows = 10;
+        private static readonly string[] CsvDelimiters = [";", ",", "\t", "|"];
+
         private readonly DatasetService _service;
         private readonly FileStorageService _fileStorageService;
         private readonly ILogger<DatasetsController> _logger;
@@ -44,6 +49,7 @@ namespace RetailForecast.Controllers
             {
                 var file = Request.Form.Files.FirstOrDefault();
                 var description = Request.Form["description"].FirstOrDefault();
+                var originalFileName = Request.Form["originalFileName"].FirstOrDefault();
                 var userIdString = Request.Form["userId"].FirstOrDefault();
 
                 if (!int.TryParse(userIdString, out var userId))
@@ -51,7 +57,7 @@ namespace RetailForecast.Controllers
 
                 var request = new CreateDatasetRequest(
                     File: file,
-                    OriginalFileName: file?.FileName,
+                    OriginalFileName: originalFileName,
                     Description: description,
                     UserId: userId);
 
@@ -80,24 +86,17 @@ namespace RetailForecast.Controllers
             try
             {
                 var file = Request.Form.Files.FirstOrDefault();
+                var description = Request.Form["description"].FirstOrDefault();
+                var originalFileName = Request.Form["originalFileName"].FirstOrDefault();
+
                 if (file == null || file.Length == 0)
                     return BadRequest(new { message = "No file provided" });
 
-                var dataset = await _service.GetByIdAsync(id, ct);
-                if (dataset == null)
+                var result = await _service.ReplaceFileAsync(id, file, originalFileName, description, ct);
+                if (result == null)
                     return NotFound(new { message = "Dataset not found" });
 
-                var storageFileName = await _fileStorageService.SaveFileAsync(file, dataset.UserId);
-                var storageFilePath = _fileStorageService.GetStorageFilePath(dataset.UserId, storageFileName);
-                var fileSizeBytes = _fileStorageService.GetFileSizeBytes(storageFilePath);
-
-                return Ok(new
-                {
-                    id = dataset.Id,
-                    storageFileName,
-                    fileSizeBytes,
-                    fileExtension = Path.GetExtension(storageFileName)
-                });
+                return Ok(result);
             }
             catch (InvalidOperationException ex)
             {
@@ -125,8 +124,9 @@ namespace RetailForecast.Controllers
 
                 var filePath = _fileStorageService.GetStorageFilePath(dataset.UserId, dataset.StorageFileName);
                 var fileStream = _fileStorageService.GetFileStream(filePath);
+                var downloadFileName = BuildDownloadFileName(dataset.OriginalFileName, dataset.FileExtension);
 
-                return File(fileStream, "application/octet-stream", dataset.OriginalFileName);
+                return File(fileStream, "application/octet-stream", downloadFileName);
             }
             catch (FileNotFoundException)
             {
@@ -159,7 +159,11 @@ namespace RetailForecast.Controllers
 
         [HttpGet("{id}/preview")]
         [Authorize]
-        public async Task<IActionResult> GetPreview(int id, [FromQuery] int rows = 100, CancellationToken ct = default)
+        public async Task<IActionResult> GetPreview(
+            int id,
+            [FromQuery] int rows = DefaultPreviewRows,
+            [FromQuery] int page = 1,
+            CancellationToken ct = default)
         {
             try
             {
@@ -171,16 +175,18 @@ namespace RetailForecast.Controllers
                     return BadRequest(new { message = "No file associated with this dataset" });
 
                 var filePath = _fileStorageService.GetStorageFilePath(dataset.UserId, dataset.StorageFileName);
+                var previewRows = rows > 0 ? rows : DefaultPreviewRows;
+                var previewPage = page > 0 ? page : 1;
+                var previewData = ParseFilePreview(filePath, dataset.FileExtension, previewRows, previewPage);
 
-                // Parse CSV or Excel file
-                var previewData = ParseFilePreview(filePath, dataset.FileExtension, rows);
-                
                 return Ok(new
                 {
                     dataset.OriginalFileName,
                     columns = previewData.Columns,
                     rows = previewData.Rows,
                     totalRows = previewData.TotalRows,
+                    currentPage = previewPage,
+                    pageSize = previewRows,
                     preview = true
                 });
             }
@@ -196,20 +202,21 @@ namespace RetailForecast.Controllers
         }
 
         private (List<string> Columns, List<Dictionary<string, string>> Rows, int TotalRows) ParseFilePreview(
-            string filePath, string fileExtension, int rowLimit)
+            string filePath, string fileExtension, int rowLimit, int page)
         {
             var columns = new List<string>();
             var rows = new List<Dictionary<string, string>>();
-            int totalRows = 0;
+            var totalRows = 0;
+            var offset = (page - 1) * rowLimit;
 
             if (fileExtension.Equals(".csv", StringComparison.OrdinalIgnoreCase))
             {
-                ParseCsvPreview(filePath, rowLimit, columns, rows, out totalRows);
+                ParseCsvPreview(filePath, rowLimit, offset, columns, rows, out totalRows);
             }
             else if (fileExtension.Equals(".xlsx", StringComparison.OrdinalIgnoreCase) ||
                      fileExtension.Equals(".xls", StringComparison.OrdinalIgnoreCase))
             {
-                ParseExcelPreview(filePath, rowLimit, columns, rows, out totalRows);
+                ParseExcelPreview(filePath, rowLimit, offset, columns, rows, out totalRows);
             }
             else
             {
@@ -219,49 +226,206 @@ namespace RetailForecast.Controllers
             return (columns, rows, totalRows);
         }
 
-        private void ParseCsvPreview(string filePath, int rowLimit, List<string> columns,
+        private void ParseCsvPreview(string filePath, int rowLimit, int offset, List<string> columns,
             List<Dictionary<string, string>> rows, out int totalRows)
         {
             totalRows = 0;
-            bool headerRead = false;
+            var headerRead = false;
+            var delimiter = DetectCsvDelimiter(filePath);
 
-            using (var reader = new StreamReader(filePath))
+            using var parser = new TextFieldParser(filePath);
+            parser.SetDelimiters(delimiter);
+            parser.HasFieldsEnclosedInQuotes = true;
+            parser.TrimWhiteSpace = false;
+
+            while (!parser.EndOfData)
             {
-                string? line;
-                while ((line = reader.ReadLine()) != null)
+                var values = parser.ReadFields();
+                if (values == null || values.All(string.IsNullOrWhiteSpace))
                 {
-                    var values = line.Split(',');
-
-                    if (!headerRead)
-                    {
-                        columns.AddRange(values.Select(v => v.Trim('"').Trim()));
-                        headerRead = true;
-                    }
-                    else
-                    {
-                        if (rows.Count >= rowLimit)
-                            break;
-
-                        var row = new Dictionary<string, string>();
-                        for (int i = 0; i < columns.Count && i < values.Length; i++)
-                        {
-                            row[columns[i]] = values[i].Trim('"').Trim();
-                        }
-                        rows.Add(row);
-                    }
-
-                    totalRows++;
+                    continue;
                 }
+
+                var normalizedValues = values.Select(value => value?.Trim() ?? string.Empty).ToArray();
+
+                if (!headerRead)
+                {
+                    columns.AddRange(NormalizeHeaders(normalizedValues));
+                    headerRead = true;
+                    continue;
+                }
+
+                totalRows++;
+                if (totalRows <= offset || rows.Count >= rowLimit)
+                {
+                    continue;
+                }
+
+                rows.Add(CreateRow(columns, index => index < normalizedValues.Length ? normalizedValues[index] : string.Empty));
             }
         }
 
-        private void ParseExcelPreview(string filePath, int rowLimit, List<string> columns,
+        private void ParseExcelPreview(string filePath, int rowLimit, int offset, List<string> columns,
             List<Dictionary<string, string>> rows, out int totalRows)
         {
             totalRows = 0;
-            
-            // For now, return empty preview for Excel - requires additional NuGet package
-            throw new NotImplementedException("Excel preview is not yet implemented. Please use CSV files for now.");
+            var headerRead = false;
+
+            using var stream = System.IO.File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var reader = ExcelReaderFactory.CreateReader(stream);
+
+            while (reader.Read())
+            {
+                if (!headerRead)
+                {
+                    if (IsEmptyRow(reader))
+                    {
+                        continue;
+                    }
+
+                    var headers = Enumerable.Range(0, reader.FieldCount)
+                        .Select(index => GetCellValue(reader.GetValue(index)))
+                        .ToArray();
+
+                    columns.AddRange(NormalizeHeaders(headers));
+                    headerRead = true;
+                    continue;
+                }
+
+                if (IsEmptyRow(reader))
+                {
+                    continue;
+                }
+
+                totalRows++;
+                if (totalRows <= offset || rows.Count >= rowLimit)
+                {
+                    continue;
+                }
+
+                rows.Add(CreateRow(columns, index => index < reader.FieldCount
+                    ? GetCellValue(reader.GetValue(index))
+                    : string.Empty));
+            }
+        }
+
+        private static string DetectCsvDelimiter(string filePath)
+        {
+            using var reader = new StreamReader(filePath);
+
+            while (!reader.EndOfStream)
+            {
+                var line = reader.ReadLine();
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                return CsvDelimiters
+                    .Select(delimiter => new
+                    {
+                        Delimiter = delimiter,
+                        Score = CountDelimitedFields(line, delimiter)
+                    })
+                    .OrderByDescending(candidate => candidate.Score)
+                    .ThenBy(candidate => Array.IndexOf(CsvDelimiters, candidate.Delimiter))
+                    .FirstOrDefault(candidate => candidate.Score > 1)?.Delimiter ?? ",";
+            }
+
+            return ",";
+        }
+
+        private static int CountDelimitedFields(string line, string delimiter)
+        {
+            var count = 1;
+            var inQuotes = false;
+
+            for (var index = 0; index < line.Length; index++)
+            {
+                if (line[index] == '"')
+                {
+                    if (inQuotes && index + 1 < line.Length && line[index + 1] == '"')
+                    {
+                        index++;
+                        continue;
+                    }
+
+                    inQuotes = !inQuotes;
+                    continue;
+                }
+
+                if (!inQuotes && MatchesDelimiter(line, delimiter, index))
+                {
+                    count++;
+                    index += delimiter.Length - 1;
+                }
+            }
+
+            return count;
+        }
+
+        private static bool MatchesDelimiter(string line, string delimiter, int index)
+            => index + delimiter.Length <= line.Length &&
+               string.Compare(line, index, delimiter, 0, delimiter.Length, StringComparison.Ordinal) == 0;
+
+        private static Dictionary<string, string> CreateRow(IReadOnlyList<string> columns, Func<int, string> valueProvider)
+        {
+            var row = new Dictionary<string, string>(columns.Count, StringComparer.Ordinal);
+
+            for (var index = 0; index < columns.Count; index++)
+            {
+                row[columns[index]] = valueProvider(index);
+            }
+
+            return row;
+        }
+
+        private static List<string> NormalizeHeaders(IEnumerable<string> headers)
+        {
+            var normalizedHeaders = new List<string>();
+            var duplicates = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var index = 1;
+
+            foreach (var header in headers)
+            {
+                var candidate = string.IsNullOrWhiteSpace(header)
+                    ? $"Column{index}"
+                    : header.Trim();
+
+                if (duplicates.TryGetValue(candidate, out var count))
+                {
+                    count++;
+                    duplicates[candidate] = count;
+                    candidate = $"{candidate}_{count}";
+                }
+                else
+                {
+                    duplicates[candidate] = 1;
+                }
+
+                normalizedHeaders.Add(candidate);
+                index++;
+            }
+
+            return normalizedHeaders;
+        }
+
+        private static bool IsEmptyRow(IExcelDataReader reader)
+            => Enumerable.Range(0, reader.FieldCount)
+                .All(index => string.IsNullOrWhiteSpace(GetCellValue(reader.GetValue(index))));
+
+        private static string GetCellValue(object? value)
+            => value?.ToString()?.Trim() ?? string.Empty;
+
+        private static string BuildDownloadFileName(string datasetName, string fileExtension)
+        {
+            if (!string.IsNullOrWhiteSpace(fileExtension) &&
+                !datasetName.EndsWith(fileExtension, StringComparison.OrdinalIgnoreCase))
+            {
+                return $"{datasetName}{fileExtension}";
+            }
+
+            return datasetName;
         }
 
         [HttpDelete("{id}")]
@@ -273,3 +437,4 @@ namespace RetailForecast.Controllers
         }
     }
 }
+

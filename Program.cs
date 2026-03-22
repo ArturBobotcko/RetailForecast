@@ -6,6 +6,8 @@ using RetailForecast.Services;
 using RetailForecast.Settings;
 using System.Text;
 
+Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();

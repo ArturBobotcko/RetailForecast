@@ -1,8 +1,7 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using RetailForecast.DTOs.Dataset;
 using RetailForecast.Entities;
 using RetailForecast.Data;
-using System;
 
 namespace RetailForecast.Services
 {
@@ -47,16 +46,7 @@ namespace RetailForecast.Services
 
             if (dataset is null) return null;
 
-            return new DatasetResponse(
-                dataset.Id,
-                dataset.OriginalFileName,
-                dataset.StorageFileName,
-                dataset.FileSizeBytes,
-                dataset.FileExtension,
-                dataset.Description,
-                dataset.CreatedAt,
-                dataset.UpdatedAt,
-                dataset.UserId);
+            return MapResponse(dataset);
         }
 
         public async Task<DatasetResponse> CreateAsync(
@@ -73,41 +63,33 @@ namespace RetailForecast.Services
             string storageFilePath = string.Empty;
             long fileSizeBytes = 0;
             string fileExtension = string.Empty;
+            var datasetTitle = string.IsNullOrWhiteSpace(request.OriginalFileName)
+                ? request.File?.FileName ?? "Unnamed Dataset"
+                : request.OriginalFileName.Trim();
 
-            // If file is provided, save it
             if (request.File != null && request.File.Length > 0)
             {
-                var originalFileName = request.OriginalFileName ?? request.File.FileName;
-                storageFileName = await _fileStorageService.SaveFileAsync(request.File, request.UserId, originalFileName);
+                storageFileName = await _fileStorageService.SaveFileAsync(request.File, request.UserId);
                 storageFilePath = _fileStorageService.GetStorageFilePath(request.UserId, storageFileName);
                 fileSizeBytes = _fileStorageService.GetFileSizeBytes(storageFilePath);
-                fileExtension = Path.GetExtension(storageFileName).ToLower();
+                fileExtension = Path.GetExtension(storageFileName).ToLowerInvariant();
             }
 
             var dataset = new Dataset
             {
-                OriginalFileName = request.OriginalFileName ?? request.File?.FileName ?? "Unnamed Dataset",
+                OriginalFileName = datasetTitle,
                 StorageFileName = storageFileName,
                 StorageFilePath = storageFilePath,
                 FileSizeBytes = fileSizeBytes,
                 FileExtension = fileExtension,
-                Description = request.Description,
+                Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
                 UserId = request.UserId
             };
 
             _context.Datasets.Add(dataset);
             await _context.SaveChangesAsync(ct);
 
-            return new DatasetResponse(
-                dataset.Id,
-                dataset.OriginalFileName,
-                dataset.StorageFileName,
-                dataset.FileSizeBytes,
-                dataset.FileExtension,
-                dataset.Description,
-                dataset.CreatedAt,
-                dataset.UpdatedAt,
-                dataset.UserId);
+            return MapResponse(dataset);
         }
 
         public async Task<DatasetResponse?> UpdateAsync(
@@ -117,21 +99,59 @@ namespace RetailForecast.Services
 
             if (dataset is null) return null;
 
-            if (!string.IsNullOrWhiteSpace(request.OriginalFileName))
-                dataset.OriginalFileName = request.OriginalFileName;
+            if (request.OriginalFileName != null && !string.IsNullOrWhiteSpace(request.OriginalFileName))
+                dataset.OriginalFileName = request.OriginalFileName.Trim();
+
+            if (request.Description != null)
+                dataset.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
 
             await _context.SaveChangesAsync(ct);
 
-            return new DatasetResponse(
-                dataset.Id,
-                dataset.OriginalFileName,
-                dataset.StorageFileName,
-                dataset.FileSizeBytes,
-                dataset.FileExtension,
-                dataset.Description,
-                dataset.CreatedAt,
-                dataset.UpdatedAt,
-                dataset.UserId);
+            return MapResponse(dataset);
+        }
+
+        public async Task<DatasetResponse?> ReplaceFileAsync(
+            int id,
+            IFormFile file,
+            string? originalFileName,
+            string? description,
+            CancellationToken ct = default)
+        {
+            var dataset = await _context.Datasets.FindAsync([id], ct);
+            if (dataset is null) return null;
+
+            var resolvedOriginalFileName = !string.IsNullOrWhiteSpace(originalFileName)
+                ? originalFileName.Trim()
+                : dataset.OriginalFileName;
+
+            var storageFileName = await _fileStorageService.SaveFileAsync(file, dataset.UserId);
+            var storageFilePath = _fileStorageService.GetStorageFilePath(dataset.UserId, storageFileName);
+            var fileSizeBytes = _fileStorageService.GetFileSizeBytes(storageFilePath);
+            var previousStoragePath = dataset.StorageFilePath;
+
+            dataset.OriginalFileName = resolvedOriginalFileName;
+            dataset.StorageFileName = storageFileName;
+            dataset.StorageFilePath = storageFilePath;
+            dataset.FileSizeBytes = fileSizeBytes;
+            dataset.FileExtension = Path.GetExtension(storageFileName).ToLowerInvariant();
+            dataset.Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+
+            await _context.SaveChangesAsync(ct);
+
+            if (!string.IsNullOrWhiteSpace(previousStoragePath) &&
+                !string.Equals(previousStoragePath, storageFilePath, StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    _fileStorageService.DeleteFile(previousStoragePath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning($"Failed to delete previous dataset file: {ex.Message}");
+                }
+            }
+
+            return MapResponse(dataset);
         }
 
         public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)
@@ -140,7 +160,6 @@ namespace RetailForecast.Services
 
             if (dataset is null) return false;
 
-            // Delete file from storage first
             if (!string.IsNullOrEmpty(dataset.StorageFilePath))
             {
                 try
@@ -150,7 +169,6 @@ namespace RetailForecast.Services
                 catch (Exception ex)
                 {
                     _logger.LogWarning($"Failed to delete file: {ex.Message}");
-                    // Continue with DB deletion even if file deletion fails
                 }
             }
 
@@ -159,5 +177,17 @@ namespace RetailForecast.Services
 
             return true;
         }
+
+        private static DatasetResponse MapResponse(Dataset dataset)
+            => new(
+                dataset.Id,
+                dataset.OriginalFileName,
+                dataset.StorageFileName,
+                dataset.FileSizeBytes,
+                dataset.FileExtension,
+                dataset.Description,
+                dataset.CreatedAt,
+                dataset.UpdatedAt,
+                dataset.UserId);
     }
 }

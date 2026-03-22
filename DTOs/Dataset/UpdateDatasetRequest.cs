@@ -1,10 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
 namespace RetailForecast.DTOs.Dataset
 {
     public record UpdateDatasetRequest(
-        string? OriginalFileName = null
+        string? OriginalFileName = null,
+        string? Description = null
     );
 }
