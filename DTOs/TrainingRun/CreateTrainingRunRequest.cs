@@ -4,6 +4,6 @@ namespace RetailForecast.DTOs.TrainingRun
         string TargetColumn,
         int DatasetId,
         int ModelId,
-        List<int> FeatureIds
+        List<string> FeatureColumns
     );
 }

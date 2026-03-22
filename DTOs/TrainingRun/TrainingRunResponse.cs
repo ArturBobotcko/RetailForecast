@@ -7,7 +7,10 @@ namespace RetailForecast.DTOs.TrainingRun
         DateTime? FinishedAt,
         string Status,
         int DatasetId,
+        string DatasetName,
         int ModelId,
+        string ModelName,
+        List<string> FeatureColumns,
         DateTime CreatedAt,
         DateTime UpdatedAt
     );
