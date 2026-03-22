@@ -157,6 +157,113 @@ namespace RetailForecast.Controllers
             }
         }
 
+        [HttpGet("{id}/preview")]
+        [Authorize]
+        public async Task<IActionResult> GetPreview(int id, [FromQuery] int rows = 100, CancellationToken ct = default)
+        {
+            try
+            {
+                var dataset = await _service.GetByIdAsync(id, ct);
+                if (dataset == null)
+                    return NotFound(new { message = "Dataset not found" });
+
+                if (string.IsNullOrEmpty(dataset.StorageFileName))
+                    return BadRequest(new { message = "No file associated with this dataset" });
+
+                var filePath = _fileStorageService.GetStorageFilePath(dataset.UserId, dataset.StorageFileName);
+
+                // Parse CSV or Excel file
+                var previewData = ParseFilePreview(filePath, dataset.FileExtension, rows);
+                
+                return Ok(new
+                {
+                    dataset.OriginalFileName,
+                    columns = previewData.Columns,
+                    rows = previewData.Rows,
+                    totalRows = previewData.TotalRows,
+                    preview = true
+                });
+            }
+            catch (FileNotFoundException)
+            {
+                return NotFound(new { message = "File not found" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting preview: {ex.Message}");
+                return StatusCode(500, new { message = ex.Message });
+            }
+        }
+
+        private (List<string> Columns, List<Dictionary<string, string>> Rows, int TotalRows) ParseFilePreview(
+            string filePath, string fileExtension, int rowLimit)
+        {
+            var columns = new List<string>();
+            var rows = new List<Dictionary<string, string>>();
+            int totalRows = 0;
+
+            if (fileExtension.Equals(".csv", StringComparison.OrdinalIgnoreCase))
+            {
+                ParseCsvPreview(filePath, rowLimit, columns, rows, out totalRows);
+            }
+            else if (fileExtension.Equals(".xlsx", StringComparison.OrdinalIgnoreCase) ||
+                     fileExtension.Equals(".xls", StringComparison.OrdinalIgnoreCase))
+            {
+                ParseExcelPreview(filePath, rowLimit, columns, rows, out totalRows);
+            }
+            else
+            {
+                throw new InvalidOperationException($"Unsupported file format: {fileExtension}");
+            }
+
+            return (columns, rows, totalRows);
+        }
+
+        private void ParseCsvPreview(string filePath, int rowLimit, List<string> columns,
+            List<Dictionary<string, string>> rows, out int totalRows)
+        {
+            totalRows = 0;
+            bool headerRead = false;
+
+            using (var reader = new StreamReader(filePath))
+            {
+                string? line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    var values = line.Split(',');
+
+                    if (!headerRead)
+                    {
+                        columns.AddRange(values.Select(v => v.Trim('"').Trim()));
+                        headerRead = true;
+                    }
+                    else
+                    {
+                        if (rows.Count >= rowLimit)
+                            break;
+
+                        var row = new Dictionary<string, string>();
+                        for (int i = 0; i < columns.Count && i < values.Length; i++)
+                        {
+                            row[columns[i]] = values[i].Trim('"').Trim();
+                        }
+                        rows.Add(row);
+                    }
+
+                    totalRows++;
+                }
+            }
+        }
+
+        private void ParseExcelPreview(string filePath, int rowLimit, List<string> columns,
+            List<Dictionary<string, string>> rows, out int totalRows)
+        {
+            totalRows = 0;
+            
+            // For now, return empty preview for Excel - requires additional NuGet package
+            throw new NotImplementedException("Excel preview is not yet implemented. Please use CSV files for now.");
+        }
+
         [HttpDelete("{id}")]
         [Authorize]
         public async Task<IActionResult> Delete(int id, CancellationToken ct)
