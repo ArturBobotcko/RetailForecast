@@ -14,10 +14,6 @@ namespace RetailForecast.Data.Configurations
                 .IsRequired()
                 .HasMaxLength(255);
 
-            builder.Property(k => k.DataType)
-                .IsRequired()
-                .HasMaxLength(50);
-
             builder.HasOne(k => k.Dataset)
                 .WithMany(d => d.Kpis)
                 .HasForeignKey(k => k.DatasetId)

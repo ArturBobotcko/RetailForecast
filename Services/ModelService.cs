@@ -16,17 +16,11 @@ namespace RetailForecast.Services
 
         public async Task<List<ModelResponse>> GetAllAsync(CancellationToken ct = default)
         {
-            return await _context.Models
+            var models = await _context.Models
                 .AsNoTracking()
-                .Select(m => new ModelResponse(
-                    m.Id,
-                    m.Name,
-                    m.Algorithm,
-                    m.Description,
-                    m.CreatedAt,
-                    m.UpdatedAt
-                    ))
                 .ToListAsync(ct);
+
+            return models.Select(MapResponse).ToList();
         }
 
         public async Task<ModelResponse?> GetByIdAsync(int id, CancellationToken ct = default)
@@ -36,13 +30,7 @@ namespace RetailForecast.Services
 
             if (model is null) return null;
 
-            return new ModelResponse(
-                model.Id,
-                model.Name,
-                model.Algorithm,
-                model.Description,
-                model.CreatedAt,
-                model.UpdatedAt);
+            return MapResponse(model);
         }
 
         public async Task<ModelResponse> CreateAsync(
@@ -61,13 +49,7 @@ namespace RetailForecast.Services
             _context.Models.Add(model);
             await _context.SaveChangesAsync(ct);
 
-            return new ModelResponse(
-                model.Id,
-                model.Name,
-                model.Algorithm,
-                model.Description,
-                model.CreatedAt,
-                model.UpdatedAt);
+            return MapResponse(model);
         }
 
         public async Task<ModelResponse?> UpdateAsync(
@@ -91,13 +73,7 @@ namespace RetailForecast.Services
 
             await _context.SaveChangesAsync(ct);
 
-            return new ModelResponse(
-                model.Id,
-                model.Name,
-                model.Algorithm,
-                model.Description,
-                model.CreatedAt,
-                model.UpdatedAt);
+            return MapResponse(model);
         }
 
         public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)
@@ -111,5 +87,14 @@ namespace RetailForecast.Services
 
             return true;
         }
+
+        private static ModelResponse MapResponse(Model model)
+            => new(
+                model.Id,
+                model.Name,
+                model.Algorithm,
+                model.Description,
+                model.CreatedAt,
+                model.UpdatedAt);
     }
 }

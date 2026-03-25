@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RetailForecast.DTOs.TrainingRun;
 using RetailForecast.Services;
@@ -6,6 +8,7 @@ namespace RetailForecast.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class TrainingRunsController : ControllerBase
     {
         private readonly TrainingRunService _service;
@@ -17,12 +20,20 @@ namespace RetailForecast.Controllers
 
         [HttpGet]
         public async Task<IActionResult> GetAll(CancellationToken ct)
-            => Ok(await _service.GetAllAsync(ct));
+        {
+            if (!TryGetCurrentUserId(out var userId))
+                return Unauthorized(new { message = "Invalid user token" });
+
+            return Ok(await _service.GetAllAsync(userId, ct));
+        }
 
         [HttpGet("{id}")]
         public async Task<IActionResult> GetById(int id, CancellationToken ct)
         {
-            var result = await _service.GetByIdAsync(id, ct);
+            if (!TryGetCurrentUserId(out var userId))
+                return Unauthorized(new { message = "Invalid user token" });
+
+            var result = await _service.GetByIdAsync(id, userId, ct);
             return result is null ? NotFound() : Ok(result);
         }
 
@@ -32,8 +43,11 @@ namespace RetailForecast.Controllers
         {
             try
             {
-                var result = await _service.CreateAsync(request, ct);
-                return result is null ? BadRequest(new { message = "Invalid request" }) : CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+                if (!TryGetCurrentUserId(out var userId))
+                    return Unauthorized(new { message = "Invalid user token" });
+
+                var result = await _service.CreateAsync(request, userId, ct);
+                return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
             }
             catch (ArgumentException ex)
             {
@@ -51,7 +65,10 @@ namespace RetailForecast.Controllers
         {
             try
             {
-                var result = await _service.UpdateAsync(id, request, ct);
+                if (!TryGetCurrentUserId(out var userId))
+                    return Unauthorized(new { message = "Invalid user token" });
+
+                var result = await _service.UpdateAsync(id, userId, request, ct);
                 if (result is null)
                     return NotFound(new { message = "TrainingRun not found or no fields to update" });
                 return Ok(result);
@@ -65,8 +82,18 @@ namespace RetailForecast.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id, CancellationToken ct)
         {
-            var deleted = await _service.DeleteAsync(id, ct);
+            if (!TryGetCurrentUserId(out var userId))
+                return Unauthorized(new { message = "Invalid user token" });
+
+            var deleted = await _service.DeleteAsync(id, userId, ct);
             return deleted ? NoContent() : NotFound();
+        }
+
+        private bool TryGetCurrentUserId(out int userId)
+        {
+            userId = 0;
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            return int.TryParse(userIdClaim, out userId);
         }
     }
 }

@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using RetailForecast.Data;
 using RetailForecast.DTOs.Dataset;
 using RetailForecast.Entities;
-using RetailForecast.Data;
 
 namespace RetailForecast.Services
 {
@@ -23,20 +23,12 @@ namespace RetailForecast.Services
 
         public async Task<List<DatasetResponse>> GetAllAsync(int userId, CancellationToken ct = default)
         {
-            return await _context.Datasets
+            var datasets = await _context.Datasets
                 .AsNoTracking()
                 .Where(d => d.UserId == userId)
-                .Select(d => new DatasetResponse(
-                    d.Id,
-                    d.OriginalFileName,
-                    d.StorageFileName,
-                    d.FileSizeBytes,
-                    d.FileExtension,
-                    d.Description,
-                    d.CreatedAt,
-                    d.UpdatedAt,
-                    d.UserId))
                 .ToListAsync(ct);
+
+            return datasets.Select(MapResponse).ToList();
         }
 
         public async Task<DatasetResponse?> GetByIdAsync(int id, int userId, CancellationToken ct = default)
@@ -45,13 +37,10 @@ namespace RetailForecast.Services
                 .AsNoTracking()
                 .FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId, ct);
 
-            if (dataset is null) return null;
-
-            return MapResponse(dataset);
+            return dataset is null ? null : MapResponse(dataset);
         }
 
-        public async Task<DatasetResponse> CreateAsync(
-            CreateDatasetRequest request, CancellationToken ct = default)
+        public async Task<DatasetResponse> CreateAsync(CreateDatasetRequest request, CancellationToken ct = default)
         {
             if (request.UserId <= 0)
                 throw new ArgumentException("Valid UserId is required");
@@ -60,30 +49,20 @@ namespace RetailForecast.Services
             if (user is null)
                 throw new InvalidOperationException("User not found");
 
-            string storageFileName = string.Empty;
-            string storageFilePath = string.Empty;
-            long fileSizeBytes = 0;
-            string fileExtension = string.Empty;
             var datasetTitle = string.IsNullOrWhiteSpace(request.OriginalFileName)
                 ? request.File?.FileName ?? "Unnamed Dataset"
                 : request.OriginalFileName.Trim();
 
-            if (request.File != null && request.File.Length > 0)
-            {
-                storageFileName = await _fileStorageService.SaveFileAsync(request.File, request.UserId);
-                storageFilePath = _fileStorageService.GetStorageFilePath(request.UserId, storageFileName);
-                fileSizeBytes = _fileStorageService.GetFileSizeBytes(storageFilePath);
-                fileExtension = Path.GetExtension(storageFileName).ToLowerInvariant();
-            }
+            var fileData = await SaveDatasetFileAsync(request.File, request.UserId);
 
             var dataset = new Dataset
             {
                 OriginalFileName = datasetTitle,
-                StorageFileName = storageFileName,
-                StorageFilePath = storageFilePath,
-                FileSizeBytes = fileSizeBytes,
-                FileExtension = fileExtension,
-                Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+                StorageFileName = fileData.StorageFileName,
+                StorageFilePath = fileData.StorageFilePath,
+                FileSizeBytes = fileData.FileSizeBytes,
+                FileExtension = fileData.FileExtension,
+                Description = NormalizeNullableText(request.Description),
                 UserId = request.UserId
             };
 
@@ -93,55 +72,49 @@ namespace RetailForecast.Services
             return MapResponse(dataset);
         }
 
-        public async Task<DatasetResponse?> UpdateAsync(
-            int id, int userId, UpdateDatasetRequest request, CancellationToken ct = default)
+        public async Task<DatasetResponse?> UpdateAsync(int id, int userId, UpdateDatasetRequest request, CancellationToken ct = default)
         {
-            var dataset = await _context.Datasets.FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId, ct);
+            var dataset = await _context.Datasets
+                .FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId, ct);
 
             if (dataset is null) return null;
 
-            if (request.OriginalFileName != null && !string.IsNullOrWhiteSpace(request.OriginalFileName))
+            if (!string.IsNullOrWhiteSpace(request.OriginalFileName))
                 dataset.OriginalFileName = request.OriginalFileName.Trim();
 
             if (request.Description != null)
-                dataset.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+                dataset.Description = NormalizeNullableText(request.Description);
 
             await _context.SaveChangesAsync(ct);
 
             return MapResponse(dataset);
         }
 
-        public async Task<DatasetResponse?> ReplaceFileAsync(
-            int id,
-            int userId,
-            IFormFile file,
-            string? originalFileName,
-            string? description,
-            CancellationToken ct = default)
+        public async Task<DatasetResponse?> ReplaceFileAsync(int id, ReplaceDatasetFileRequest request, CancellationToken ct = default)
         {
-            var dataset = await _context.Datasets.FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId, ct);
+            var dataset = await _context.Datasets
+                .FirstOrDefaultAsync(d => d.Id == id && d.UserId == request.UserId, ct);
+
             if (dataset is null) return null;
 
-            var resolvedOriginalFileName = !string.IsNullOrWhiteSpace(originalFileName)
-                ? originalFileName.Trim()
+            var resolvedOriginalFileName = !string.IsNullOrWhiteSpace(request.OriginalFileName)
+                ? request.OriginalFileName.Trim()
                 : dataset.OriginalFileName;
 
-            var storageFileName = await _fileStorageService.SaveFileAsync(file, dataset.UserId);
-            var storageFilePath = _fileStorageService.GetStorageFilePath(dataset.UserId, storageFileName);
-            var fileSizeBytes = _fileStorageService.GetFileSizeBytes(storageFilePath);
             var previousStoragePath = dataset.StorageFilePath;
+            var fileData = await SaveDatasetFileAsync(request.File, dataset.UserId);
 
             dataset.OriginalFileName = resolvedOriginalFileName;
-            dataset.StorageFileName = storageFileName;
-            dataset.StorageFilePath = storageFilePath;
-            dataset.FileSizeBytes = fileSizeBytes;
-            dataset.FileExtension = Path.GetExtension(storageFileName).ToLowerInvariant();
-            dataset.Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+            dataset.StorageFileName = fileData.StorageFileName;
+            dataset.StorageFilePath = fileData.StorageFilePath;
+            dataset.FileSizeBytes = fileData.FileSizeBytes;
+            dataset.FileExtension = fileData.FileExtension;
+            dataset.Description = NormalizeNullableText(request.Description);
 
             await _context.SaveChangesAsync(ct);
 
             if (!string.IsNullOrWhiteSpace(previousStoragePath) &&
-                !string.Equals(previousStoragePath, storageFilePath, StringComparison.OrdinalIgnoreCase))
+                !string.Equals(previousStoragePath, dataset.StorageFilePath, StringComparison.OrdinalIgnoreCase))
             {
                 try
                 {
@@ -149,7 +122,7 @@ namespace RetailForecast.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning($"Failed to delete previous dataset file: {ex.Message}");
+                    _logger.LogWarning("Failed to delete previous dataset file: {Message}", ex.Message);
                 }
             }
 
@@ -158,7 +131,8 @@ namespace RetailForecast.Services
 
         public async Task<bool> DeleteAsync(int id, int userId, CancellationToken ct = default)
         {
-            var dataset = await _context.Datasets.FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId, ct);
+            var dataset = await _context.Datasets
+                .FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId, ct);
 
             if (dataset is null) return false;
 
@@ -170,7 +144,7 @@ namespace RetailForecast.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning($"Failed to delete file: {ex.Message}");
+                    _logger.LogWarning("Failed to delete file: {Message}", ex.Message);
                 }
             }
 
@@ -179,6 +153,24 @@ namespace RetailForecast.Services
 
             return true;
         }
+
+        private async Task<(string StorageFileName, string StorageFilePath, long FileSizeBytes, string FileExtension)> SaveDatasetFileAsync(IFormFile? file, int userId)
+        {
+            if (file == null || file.Length == 0)
+            {
+                return (string.Empty, string.Empty, 0, string.Empty);
+            }
+
+            var storageFileName = await _fileStorageService.SaveFileAsync(file, userId);
+            var storageFilePath = _fileStorageService.GetStorageFilePath(userId, storageFileName);
+            var fileSizeBytes = _fileStorageService.GetFileSizeBytes(storageFilePath);
+            var fileExtension = Path.GetExtension(storageFileName).ToLowerInvariant();
+
+            return (storageFileName, storageFilePath, fileSizeBytes, fileExtension);
+        }
+
+        private static string? NormalizeNullableText(string? value)
+            => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
         private static DatasetResponse MapResponse(Dataset dataset)
             => new(

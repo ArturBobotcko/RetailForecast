@@ -16,16 +16,11 @@ namespace RetailForecast.Services
 
         public async Task<List<TrainingMetricResponse>> GetAllAsync(CancellationToken ct = default)
         {
-            return await _context.TrainingMetrics
+            var metrics = await _context.TrainingMetrics
                 .AsNoTracking()
-                .Select(tm => new TrainingMetricResponse(
-                    tm.Id,
-                    tm.Name,
-                    tm.Value,
-                    tm.TrainingRunId,
-                    tm.CreatedAt,
-                    tm.UpdatedAt))
                 .ToListAsync(ct);
+
+            return metrics.Select(MapResponse).ToList();
         }
 
         public async Task<TrainingMetricResponse?> GetByIdAsync(int id, CancellationToken ct = default)
@@ -34,13 +29,7 @@ namespace RetailForecast.Services
 
             if (metric is null) return null;
 
-            return new TrainingMetricResponse(
-                metric.Id,
-                metric.Name,
-                metric.Value,
-                metric.TrainingRunId,
-                metric.CreatedAt,
-                metric.UpdatedAt);
+            return MapResponse(metric);
         }
 
         public async Task<TrainingMetricResponse?> CreateAsync(
@@ -66,13 +55,7 @@ namespace RetailForecast.Services
             _context.TrainingMetrics.Add(metric);
             await _context.SaveChangesAsync(ct);
 
-            return new TrainingMetricResponse(
-                metric.Id,
-                metric.Name,
-                metric.Value,
-                metric.TrainingRunId,
-                metric.CreatedAt,
-                metric.UpdatedAt);
+            return MapResponse(metric);
         }
 
         public async Task<TrainingMetricResponse?> UpdateAsync(
@@ -97,13 +80,7 @@ namespace RetailForecast.Services
 
             await _context.SaveChangesAsync(ct);
 
-            return new TrainingMetricResponse(
-                metric.Id,
-                metric.Name,
-                metric.Value,
-                metric.TrainingRunId,
-                metric.CreatedAt,
-                metric.UpdatedAt);
+            return MapResponse(metric);
         }
 
         public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)
@@ -117,5 +94,14 @@ namespace RetailForecast.Services
 
             return true;
         }
+
+        private static TrainingMetricResponse MapResponse(TrainingMetric metric)
+            => new(
+                metric.Id,
+                metric.Name,
+                metric.Value,
+                metric.TrainingRunId,
+                metric.CreatedAt,
+                metric.UpdatedAt);
     }
 }

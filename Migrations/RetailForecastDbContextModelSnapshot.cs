@@ -200,12 +200,6 @@ namespace RetailForecast.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("NOW()");
 
-                    b.Property<string>("DataType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("data_type");
-
                     b.Property<int>("DatasetId")
                         .HasColumnType("integer")
                         .HasColumnName("dataset_id");

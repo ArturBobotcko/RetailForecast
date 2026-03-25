@@ -1,16 +1,16 @@
 namespace RetailForecast.DTOs.TrainingRun
 {
-    public record TrainingRunResponse(
+    public record TrainingRunDetailResponse(
         int Id,
-        string TargetColumn,
-        DateTime StartedAt,
-        DateTime? FinishedAt,
         string Status,
+        string TargetColumn,
         int DatasetId,
         string DatasetName,
         int ModelId,
         string ModelName,
         List<string> FeatureColumns,
+        DateTime StartedAt,
+        DateTime? FinishedAt,
         DateTime CreatedAt,
         DateTime UpdatedAt
     );

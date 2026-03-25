@@ -1,10 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using RetailForecast.Data;
-using RetailForecast.DTOs.Dataset;
 using RetailForecast.DTOs.User;
 using RetailForecast.Entities;
 using System.Security.Cryptography;
-using System.Text;
 
 namespace RetailForecast.Services
 {
@@ -21,23 +19,19 @@ namespace RetailForecast.Services
 
         private static string HashPassword(string password)
         {
-            using (var sha256 = SHA256.Create())
-            {
-                var salt = new byte[16];
-                using (var rng = RandomNumberGenerator.Create())
-                {
-                    rng.GetBytes(salt);
-                }
+            var salt = RandomNumberGenerator.GetBytes(16);
+            var hash = Rfc2898DeriveBytes.Pbkdf2(
+                password,
+                salt,
+                10000,
+                HashAlgorithmName.SHA256,
+                20);
 
-                var pbkdf2 = new Rfc2898DeriveBytes(password, salt, 10000, HashAlgorithmName.SHA256);
-                var hash = pbkdf2.GetBytes(20);
+            var hashWithSalt = new byte[36];
+            Array.Copy(salt, 0, hashWithSalt, 0, 16);
+            Array.Copy(hash, 0, hashWithSalt, 16, 20);
 
-                var hashWithSalt = new byte[36];
-                Array.Copy(salt, 0, hashWithSalt, 0, 16);
-                Array.Copy(hash, 0, hashWithSalt, 16, 20);
-
-                return Convert.ToBase64String(hashWithSalt);
-            }
+            return Convert.ToBase64String(hashWithSalt);
         }
 
         private static bool VerifyPassword(string password, string hash)
@@ -46,26 +40,29 @@ namespace RetailForecast.Services
             var salt = new byte[16];
             Array.Copy(hashWithSalt, 0, salt, 0, 16);
 
-            var pbkdf2 = new Rfc2898DeriveBytes(password, salt, 10000, HashAlgorithmName.SHA256);
-            var hash2 = pbkdf2.GetBytes(20);
+            var hashToCompare = Rfc2898DeriveBytes.Pbkdf2(
+                password,
+                salt,
+                10000,
+                HashAlgorithmName.SHA256,
+                20);
 
-            for (int i = 0; i < 20; i++)
-                if (hashWithSalt[i + 16] != hash2[i])
+            for (var index = 0; index < 20; index++)
+            {
+                if (hashWithSalt[index + 16] != hashToCompare[index])
                     return false;
+            }
 
             return true;
         }
 
         public async Task<List<UserResponse>> GetAllAsync(CancellationToken ct = default)
         {
-            return await _context.Users
+            var users = await _context.Users
                 .AsNoTracking()
-                .Select(u => new UserResponse(
-                    u.Id,
-                    u.Email,
-                    u.CreatedAt,
-                    u.UpdatedAt))
                 .ToListAsync(ct);
+
+            return users.Select(MapResponse).ToList();
         }
 
         public async Task<UserResponse?> GetByIdAsync(int id, CancellationToken ct = default)
@@ -74,11 +71,7 @@ namespace RetailForecast.Services
 
             if (user is null) return null;
 
-            return new UserResponse(
-                user.Id,
-                user.Email,
-                user.CreatedAt,
-                user.UpdatedAt);
+            return MapResponse(user);
         }
 
         public async Task<UserResponse> CreateAsync(
@@ -105,11 +98,7 @@ namespace RetailForecast.Services
             _context.Users.Add(user);
             await _context.SaveChangesAsync(ct);
 
-            return new UserResponse(
-                user.Id,
-                user.Email,
-                user.CreatedAt,
-                user.UpdatedAt);
+            return MapResponse(user);
         }
 
 
@@ -144,11 +133,7 @@ namespace RetailForecast.Services
 
             await _context.SaveChangesAsync(ct);
 
-            return new UserResponse(
-                user.Id,
-                user.Email,
-                user.CreatedAt,
-                user.UpdatedAt);
+            return MapResponse(user);
         }
 
         public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)
@@ -194,5 +179,12 @@ namespace RetailForecast.Services
                 return false;
             }
         }
+
+        private static UserResponse MapResponse(User user)
+            => new(
+                user.Id,
+                user.Email,
+                user.CreatedAt,
+                user.UpdatedAt);
     }
 }

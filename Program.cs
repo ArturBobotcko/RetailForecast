@@ -60,10 +60,10 @@ builder.Services.Configure<FileUploadSettings>(builder.Configuration.GetSection(
 // Register services
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<FileStorageService>();
+builder.Services.AddScoped<DatasetPreviewService>();
 builder.Services.AddScoped<DatasetService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<ModelService>();
-builder.Services.AddScoped<KpiService>();
 builder.Services.AddScoped<TrainingRunService>();
 builder.Services.AddScoped<ForecastService>();
 builder.Services.AddScoped<TrainingMetricService>();

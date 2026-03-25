@@ -16,15 +16,11 @@ namespace RetailForecast.Services
 
         public async Task<List<ForecastResponse>> GetAllAsync(CancellationToken ct = default)
         {
-            return await _context.Forecasts
+            var forecasts = await _context.Forecasts
                 .AsNoTracking()
-                .Select(f => new ForecastResponse(
-                    f.Id,
-                    f.Horizon,
-                    f.TrainingRunId,
-                    f.CreatedAt,
-                    f.UpdatedAt))
                 .ToListAsync(ct);
+
+            return forecasts.Select(MapResponse).ToList();
         }
 
         public async Task<ForecastResponse?> GetByIdAsync(int id, CancellationToken ct = default)
@@ -33,12 +29,7 @@ namespace RetailForecast.Services
 
             if (forecast is null) return null;
 
-            return new ForecastResponse(
-                forecast.Id,
-                forecast.Horizon,
-                forecast.TrainingRunId,
-                forecast.CreatedAt,
-                forecast.UpdatedAt);
+            return MapResponse(forecast);
         }
 
         public async Task<ForecastResponse?> CreateAsync(
@@ -60,12 +51,7 @@ namespace RetailForecast.Services
             _context.Forecasts.Add(forecast);
             await _context.SaveChangesAsync(ct);
 
-            return new ForecastResponse(
-                forecast.Id,
-                forecast.Horizon,
-                forecast.TrainingRunId,
-                forecast.CreatedAt,
-                forecast.UpdatedAt);
+            return MapResponse(forecast);
         }
 
         public async Task<ForecastResponse?> UpdateAsync(
@@ -85,12 +71,7 @@ namespace RetailForecast.Services
 
             await _context.SaveChangesAsync(ct);
 
-            return new ForecastResponse(
-                forecast.Id,
-                forecast.Horizon,
-                forecast.TrainingRunId,
-                forecast.CreatedAt,
-                forecast.UpdatedAt);
+            return MapResponse(forecast);
         }
 
         public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)
@@ -104,5 +85,13 @@ namespace RetailForecast.Services
 
             return true;
         }
+
+        private static ForecastResponse MapResponse(Forecast forecast)
+            => new(
+                forecast.Id,
+                forecast.Horizon,
+                forecast.TrainingRunId,
+                forecast.CreatedAt,
+                forecast.UpdatedAt);
     }
 }

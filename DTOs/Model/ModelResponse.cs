@@ -4,7 +4,7 @@
         int Id,
         string Name,
         string Algorithm,
-        string Description,
+        string? Description,
         DateTime CreatedAt,
         DateTime UpdatedAt
     );

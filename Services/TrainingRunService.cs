@@ -15,41 +15,46 @@ namespace RetailForecast.Services
             _context = context;
         }
 
-        public async Task<List<TrainingRunResponse>> GetAllAsync(CancellationToken ct = default)
+        public async Task<List<TrainingRunListResponse>> GetAllAsync(int userId, CancellationToken ct = default)
         {
             var trainingRuns = await _context.TrainingRuns
                 .AsNoTracking()
                 .Include(tr => tr.Dataset)
                 .Include(tr => tr.Model)
-                .Include(tr => tr.Features)
+                .Where(tr => tr.Dataset.UserId == userId)
+                .OrderByDescending(tr => tr.CreatedAt)
                 .ToListAsync(ct);
 
-            return trainingRuns.Select(MapResponse).ToList();
+            return trainingRuns.Select(MapListResponse).ToList();
         }
 
-        public async Task<TrainingRunResponse?> GetByIdAsync(int id, CancellationToken ct = default)
+        public async Task<TrainingRunDetailResponse?> GetByIdAsync(int id, int userId, CancellationToken ct = default)
         {
             var trainingRun = await _context.TrainingRuns
                 .AsNoTracking()
                 .Include(tr => tr.Dataset)
                 .Include(tr => tr.Model)
                 .Include(tr => tr.Features)
-                .FirstOrDefaultAsync(tr => tr.Id == id, ct);
+                .FirstOrDefaultAsync(tr => tr.Id == id && tr.Dataset.UserId == userId, ct);
 
-            return trainingRun is null ? null : MapResponse(trainingRun);
+            return trainingRun is null ? null : MapDetailResponse(trainingRun);
         }
 
-        public async Task<TrainingRunResponse?> CreateAsync(
-            CreateTrainingRunRequest request, CancellationToken ct = default)
+        public async Task<TrainingRunDetailResponse> CreateAsync(
+            CreateTrainingRunRequest request, int userId, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(request.TargetColumn) || request.FeatureColumns is null || request.FeatureColumns.Count == 0)
                 throw new ArgumentException("TargetColumn and at least one feature column are required");
 
-            var dataset = await _context.Datasets.FindAsync([request.DatasetId], ct);
+            var dataset = await _context.Datasets
+                .AsNoTracking()
+                .FirstOrDefaultAsync(d => d.Id == request.DatasetId && d.UserId == userId, ct);
             if (dataset is null)
                 throw new InvalidOperationException("Dataset not found");
 
-            var model = await _context.Models.FindAsync([request.ModelId], ct);
+            var model = await _context.Models
+                .AsNoTracking()
+                .FirstOrDefaultAsync(m => m.Id == request.ModelId, ct);
             if (model is null)
                 throw new InvalidOperationException("Model not found");
 
@@ -66,30 +71,29 @@ namespace RetailForecast.Services
             if (normalizedFeatureColumns.Any(column => string.Equals(column, normalizedTargetColumn, StringComparison.OrdinalIgnoreCase)))
                 throw new ArgumentException("Target column cannot be included in feature columns");
 
-            var existingFeatures = await _context.Kpis
-                .Where(k => k.DatasetId == request.DatasetId && normalizedFeatureColumns.Contains(k.Name))
+            var existing = await _context.Kpis
+                .Where(k => k.DatasetId == request.DatasetId)
                 .ToListAsync(ct);
 
-            var missingFeatureColumns = normalizedFeatureColumns
-                .Where(column => existingFeatures.All(feature => !string.Equals(feature.Name, column, StringComparison.OrdinalIgnoreCase)))
+            var missing = normalizedFeatureColumns
+                .Where(column => existing.All(feature => !string.Equals(feature.Name, column, StringComparison.OrdinalIgnoreCase)))
                 .ToList();
 
-            if (missingFeatureColumns.Count > 0)
+            if (missing.Count > 0)
             {
-                var newFeatures = missingFeatureColumns.Select(column => new Kpi
+                var createdFeatures = missing.Select(column => new Kpi
                 {
                     Name = column,
-                    DataType = "Unknown",
                     DatasetId = request.DatasetId
                 }).ToList();
 
-                _context.Kpis.AddRange(newFeatures);
+                _context.Kpis.AddRange(createdFeatures);
                 await _context.SaveChangesAsync(ct);
-                existingFeatures.AddRange(newFeatures);
+                existing.AddRange(createdFeatures);
             }
 
-            var orderedFeatures = normalizedFeatureColumns
-                .Select(column => existingFeatures.First(feature => string.Equals(feature.Name, column, StringComparison.OrdinalIgnoreCase)))
+            var ordered = normalizedFeatureColumns
+                .Select(column => existing.First(feature => string.Equals(feature.Name, column, StringComparison.OrdinalIgnoreCase)))
                 .ToList();
 
             var trainingRun = new TrainingRun
@@ -99,29 +103,17 @@ namespace RetailForecast.Services
                 ModelId = request.ModelId,
                 StartedAt = DateTime.UtcNow,
                 Status = TrainingStatus.Pending,
-                Features = orderedFeatures
+                Features = ordered
             };
 
             _context.TrainingRuns.Add(trainingRun);
             await _context.SaveChangesAsync(ct);
 
-            return new TrainingRunResponse(
-                trainingRun.Id,
-                trainingRun.TargetColumn,
-                trainingRun.StartedAt,
-                trainingRun.FinishedAt,
-                trainingRun.Status.ToString(),
-                dataset.Id,
-                dataset.OriginalFileName,
-                model.Id,
-                model.Name,
-                orderedFeatures.Select(feature => feature.Name).ToList(),
-                trainingRun.CreatedAt,
-                trainingRun.UpdatedAt);
+            return MapDetailResponse(trainingRun, dataset.OriginalFileName, model.Name, ordered);
         }
 
-        public async Task<TrainingRunResponse?> UpdateAsync(
-            int id, UpdateTrainingRunRequest request, CancellationToken ct = default)
+        public async Task<TrainingRunDetailResponse?> UpdateAsync(
+            int id, int userId, UpdateTrainingRunRequest request, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(request.TargetColumn) && request.FinishedAt is null && string.IsNullOrWhiteSpace(request.Status))
                 return null;
@@ -130,12 +122,12 @@ namespace RetailForecast.Services
                 .Include(tr => tr.Dataset)
                 .Include(tr => tr.Model)
                 .Include(tr => tr.Features)
-                .FirstOrDefaultAsync(tr => tr.Id == id, ct);
+                .FirstOrDefaultAsync(tr => tr.Id == id && tr.Dataset.UserId == userId, ct);
 
             if (trainingRun is null) return null;
 
             if (!string.IsNullOrWhiteSpace(request.TargetColumn))
-                trainingRun.TargetColumn = request.TargetColumn;
+                trainingRun.TargetColumn = request.TargetColumn.Trim();
 
             if (request.FinishedAt.HasValue)
                 trainingRun.FinishedAt = request.FinishedAt;
@@ -145,12 +137,14 @@ namespace RetailForecast.Services
 
             await _context.SaveChangesAsync(ct);
 
-            return MapResponse(trainingRun);
+            return MapDetailResponse(trainingRun);
         }
 
-        public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)
+        public async Task<bool> DeleteAsync(int id, int userId, CancellationToken ct = default)
         {
-            var trainingRun = await _context.TrainingRuns.FindAsync([id], ct);
+            var trainingRun = await _context.TrainingRuns
+                .Include(tr => tr.Dataset)
+                .FirstOrDefaultAsync(tr => tr.Id == id && tr.Dataset.UserId == userId, ct);
 
             if (trainingRun is null) return false;
 
@@ -160,19 +154,43 @@ namespace RetailForecast.Services
             return true;
         }
 
-        private static TrainingRunResponse MapResponse(TrainingRun trainingRun)
+        private static TrainingRunListResponse MapListResponse(TrainingRun trainingRun)
             => new(
                 trainingRun.Id,
-                trainingRun.TargetColumn,
-                trainingRun.StartedAt,
-                trainingRun.FinishedAt,
                 trainingRun.Status.ToString(),
+                trainingRun.TargetColumn,
                 trainingRun.DatasetId,
                 trainingRun.Dataset.OriginalFileName,
                 trainingRun.ModelId,
                 trainingRun.Model.Name,
-                trainingRun.Features.Select(feature => feature.Name).ToList(),
+                trainingRun.StartedAt,
+                trainingRun.FinishedAt,
                 trainingRun.CreatedAt,
                 trainingRun.UpdatedAt);
+
+        private static TrainingRunDetailResponse MapDetailResponse(
+            TrainingRun trainingRun,
+            string? datasetName = null,
+            string? modelName = null,
+            IReadOnlyCollection<Kpi>? orderedFeatures = null)
+        {
+            var featureSource = orderedFeatures is not null
+                ? orderedFeatures
+                : trainingRun.Features.ToList();
+
+            return new(
+                trainingRun.Id,
+                trainingRun.Status.ToString(),
+                trainingRun.TargetColumn,
+                trainingRun.DatasetId,
+                datasetName ?? trainingRun.Dataset.OriginalFileName,
+                trainingRun.ModelId,
+                modelName ?? trainingRun.Model.Name,
+                featureSource.Select(feature => feature.Name).ToList(),
+                trainingRun.StartedAt,
+                trainingRun.FinishedAt,
+                trainingRun.CreatedAt,
+                trainingRun.UpdatedAt);
+        }
     }
 }

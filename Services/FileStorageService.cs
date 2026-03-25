@@ -119,20 +119,24 @@ namespace RetailForecast.Services
 
             var nameWithoutExtension = Path.GetFileNameWithoutExtension(fileName);
             var extension = Path.GetExtension(fileName);
+            var escapedName = Regex.Escape(nameWithoutExtension);
+            var escapedExtension = Regex.Escape(extension);
+            var pattern = new Regex(
+                $"^{escapedName}(?: \\((?<index>\\d+)\\))?{escapedExtension}$",
+                RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-            int counter = 1;
-            string newFileName;
+            var maxSuffix = Directory.EnumerateFiles(folderPath)
+                .Select(Path.GetFileName)
+                .Where(candidate => !string.IsNullOrWhiteSpace(candidate))
+                .Select(candidate => pattern.Match(candidate!))
+                .Where(match => match.Success)
+                .Select(match => match.Groups["index"].Success
+                    ? int.Parse(match.Groups["index"].Value)
+                    : 0)
+                .DefaultIfEmpty(0)
+                .Max();
 
-            while (true)
-            {
-                newFileName = $"{nameWithoutExtension} ({counter}){extension}";
-                var fullPath = Path.Combine(folderPath, newFileName);
-
-                if (!File.Exists(fullPath))
-                    return newFileName;
-
-                counter++;
-            }
+            return $"{nameWithoutExtension} ({maxSuffix + 1}){extension}";
         }
 
         /// <summary>
