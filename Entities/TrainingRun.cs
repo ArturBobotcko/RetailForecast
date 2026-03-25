@@ -8,6 +8,8 @@ namespace RetailForecast.Entities
         public DateTime StartedAt { get; set; } = DateTime.UtcNow;
         public DateTime? FinishedAt { get; set; }
         public TrainingStatus Status { get; set; } = TrainingStatus.Pending;
+        public string? ExternalJobId { get; set; }
+        public string? ErrorMessage { get; set; }
 
         public int DatasetId { get; set; }
         public Dataset Dataset { get; private set; } = null!;

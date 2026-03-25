@@ -22,6 +22,12 @@ namespace RetailForecast.Data.Configurations
                 .HasConversion<string>()
                 .HasMaxLength(50);
 
+            builder.Property(tr => tr.ExternalJobId)
+                .HasMaxLength(255);
+
+            builder.Property(tr => tr.ErrorMessage)
+                .HasMaxLength(4000);
+
             builder.HasOne(tr => tr.Model)
                 .WithMany(m => m.TrainingRuns)
                 .HasForeignKey(tr => tr.ModelId)

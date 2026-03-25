@@ -150,6 +150,34 @@ namespace RetailForecast.Controllers
             }
         }
 
+        [HttpGet("internal/{id}/download")]
+        [AllowAnonymous]
+        public async Task<IActionResult> InternalDownload(int id, [FromQuery] int trainingRunId, CancellationToken ct)
+        {
+            try
+            {
+                var dataset = await _service.GetForTrainingRunAsync(id, trainingRunId, ct);
+                if (dataset == null)
+                    return NotFound(new { message = "Dataset not found for training run" });
+
+                if (string.IsNullOrEmpty(dataset.StorageFileName))
+                    return BadRequest(new { message = "No file associated with this dataset" });
+
+                var filePath = _fileStorageService.GetStorageFilePath(dataset.UserId, dataset.StorageFileName);
+                var fileStream = _fileStorageService.GetFileStream(filePath);
+                return File(fileStream, "application/octet-stream", BuildDownloadFileName(dataset.OriginalFileName, dataset.FileExtension));
+            }
+            catch (FileNotFoundException)
+            {
+                return NotFound(new { message = "File not found" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error downloading file for ML service");
+                return StatusCode(500, new { message = "An error occurred while downloading the file" });
+            }
+        }
+
         [HttpPut("{id}")]
         [Authorize]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateDatasetRequest request, CancellationToken ct)

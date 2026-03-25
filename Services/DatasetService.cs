@@ -40,6 +40,17 @@ namespace RetailForecast.Services
             return dataset is null ? null : MapResponse(dataset);
         }
 
+        public async Task<DatasetResponse?> GetForTrainingRunAsync(int datasetId, int trainingRunId, CancellationToken ct = default)
+        {
+            var dataset = await _context.Datasets
+                .AsNoTracking()
+                .Where(d => d.Id == datasetId)
+                .Where(d => d.TrainingRuns.Any(tr => tr.Id == trainingRunId))
+                .FirstOrDefaultAsync(ct);
+
+            return dataset is null ? null : MapResponse(dataset);
+        }
+
         public async Task<DatasetResponse> CreateAsync(CreateDatasetRequest request, CancellationToken ct = default)
         {
             if (request.UserId <= 0)

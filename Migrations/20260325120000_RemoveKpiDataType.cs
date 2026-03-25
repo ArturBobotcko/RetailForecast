@@ -1,10 +1,14 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using RetailForecast.Data;
 
 #nullable disable
 
 namespace RetailForecast.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(RetailForecastDbContext))]
+    [Migration("20260325120000_RemoveKpiDataType")]
     public partial class RemoveKpiDataType : Migration
     {
         /// <inheritdoc />

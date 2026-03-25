@@ -56,11 +56,14 @@ builder.Services.AddDbContext<RetailForecastDbContext>(options =>
 
 // Register configuration
 builder.Services.Configure<FileUploadSettings>(builder.Configuration.GetSection("FileUploadSettings"));
+builder.Services.Configure<MlServiceSettings>(builder.Configuration.GetSection("MlService"));
+builder.Services.Configure<ApplicationSettings>(builder.Configuration.GetSection("Application"));
 
 // Register services
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<FileStorageService>();
 builder.Services.AddScoped<DatasetPreviewService>();
+builder.Services.AddHttpClient<MlServiceClient>();
 builder.Services.AddScoped<DatasetService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<ModelService>();
@@ -69,6 +72,12 @@ builder.Services.AddScoped<ForecastService>();
 builder.Services.AddScoped<TrainingMetricService>();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<RetailForecastDbContext>();
+    dbContext.Database.Migrate();
+}
 
 if (app.Environment.IsDevelopment())
 {

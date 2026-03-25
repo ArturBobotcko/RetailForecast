@@ -8,6 +8,7 @@ namespace RetailForecast.DTOs.TrainingRun
         string DatasetName,
         int ModelId,
         string ModelName,
+        string? ExternalJobId,
         DateTime StartedAt,
         DateTime? FinishedAt,
         DateTime CreatedAt,

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using RetailForecast.Data;
+using RetailForecast.DTOs.TrainingMetric;
 using RetailForecast.DTOs.TrainingRun;
 using RetailForecast.Entities;
 using RetailForecast.Enums;
@@ -9,10 +10,12 @@ namespace RetailForecast.Services
     public class TrainingRunService
     {
         private readonly RetailForecastDbContext _context;
+        private readonly MlServiceClient _mlServiceClient;
 
-        public TrainingRunService(RetailForecastDbContext context)
+        public TrainingRunService(RetailForecastDbContext context, MlServiceClient mlServiceClient)
         {
             _context = context;
+            _mlServiceClient = mlServiceClient;
         }
 
         public async Task<List<TrainingRunListResponse>> GetAllAsync(int userId, CancellationToken ct = default)
@@ -35,6 +38,7 @@ namespace RetailForecast.Services
                 .Include(tr => tr.Dataset)
                 .Include(tr => tr.Model)
                 .Include(tr => tr.Features)
+                .Include(tr => tr.Metrics)
                 .FirstOrDefaultAsync(tr => tr.Id == id && tr.Dataset.UserId == userId, ct);
 
             return trainingRun is null ? null : MapDetailResponse(trainingRun);
@@ -122,6 +126,7 @@ namespace RetailForecast.Services
                 .Include(tr => tr.Dataset)
                 .Include(tr => tr.Model)
                 .Include(tr => tr.Features)
+                .Include(tr => tr.Metrics)
                 .FirstOrDefaultAsync(tr => tr.Id == id && tr.Dataset.UserId == userId, ct);
 
             if (trainingRun is null) return null;
@@ -163,10 +168,122 @@ namespace RetailForecast.Services
                 trainingRun.Dataset.OriginalFileName,
                 trainingRun.ModelId,
                 trainingRun.Model.Name,
+                trainingRun.ExternalJobId,
                 trainingRun.StartedAt,
                 trainingRun.FinishedAt,
                 trainingRun.CreatedAt,
                 trainingRun.UpdatedAt);
+
+        public async Task<StartTrainingRunResponse?> StartAsync(
+            int id,
+            int userId,
+            string downloadUrl,
+            string callbackUrl,
+            CancellationToken ct = default)
+        {
+            var trainingRun = await _context.TrainingRuns
+                .Include(tr => tr.Dataset)
+                .Include(tr => tr.Model)
+                .Include(tr => tr.Features)
+                .FirstOrDefaultAsync(tr => tr.Id == id && tr.Dataset.UserId == userId, ct);
+
+            if (trainingRun is null)
+                return null;
+
+            if (trainingRun.Status != TrainingStatus.Pending)
+                throw new InvalidOperationException("Only pending training runs can be started");
+
+            var request = new MlTrainingStartRequest(
+                trainingRun.Id,
+                trainingRun.DatasetId,
+                downloadUrl.Replace("{datasetId}", trainingRun.DatasetId.ToString(), StringComparison.Ordinal),
+                callbackUrl,
+                trainingRun.TargetColumn,
+                trainingRun.Features.Select(feature => feature.Name).ToList(),
+                new MlTrainingModelDto(
+                    trainingRun.ModelId,
+                    trainingRun.Model.Name,
+                    trainingRun.Model.Algorithm));
+
+            var response = await _mlServiceClient.StartTrainingAsync(request, ct);
+
+            trainingRun.Status = TrainingStatus.Running;
+            trainingRun.StartedAt = DateTime.UtcNow;
+            trainingRun.FinishedAt = null;
+            trainingRun.ErrorMessage = null;
+            trainingRun.ExternalJobId = string.IsNullOrWhiteSpace(response?.ExternalJobId)
+                ? trainingRun.ExternalJobId
+                : response!.ExternalJobId!.Trim();
+
+            await _context.SaveChangesAsync(ct);
+
+            return new StartTrainingRunResponse(
+                trainingRun.Id,
+                trainingRun.Status.ToString(),
+                trainingRun.ExternalJobId);
+        }
+
+        public async Task<TrainingRunDetailResponse?> ApplyCallbackAsync(
+            int id,
+            TrainingRunCallbackRequest request,
+            CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(request.Status))
+                throw new ArgumentException("Status is required");
+
+            if (!Enum.TryParse<TrainingStatus>(request.Status, true, out var status))
+                throw new ArgumentException("Invalid training status");
+
+            var trainingRun = await _context.TrainingRuns
+                .Include(tr => tr.Dataset)
+                .Include(tr => tr.Model)
+                .Include(tr => tr.Features)
+                .Include(tr => tr.Metrics)
+                .FirstOrDefaultAsync(tr => tr.Id == id, ct);
+
+            if (trainingRun is null)
+                return null;
+
+            trainingRun.Status = status;
+            trainingRun.ErrorMessage = string.IsNullOrWhiteSpace(request.Error) ? null : request.Error.Trim();
+
+            if (!string.IsNullOrWhiteSpace(request.ExternalJobId))
+                trainingRun.ExternalJobId = request.ExternalJobId.Trim();
+
+            if (status is TrainingStatus.Completed or TrainingStatus.Failed)
+                trainingRun.FinishedAt = DateTime.UtcNow;
+            else
+                trainingRun.FinishedAt = null;
+
+            _context.TrainingMetrics.RemoveRange(trainingRun.Metrics);
+            trainingRun.Metrics.Clear();
+
+            if (request.Metrics is not null)
+            {
+                var metrics = request.Metrics
+                    .Where(metric => !string.IsNullOrWhiteSpace(metric.Name))
+                    .Select(metric => new TrainingMetric
+                    {
+                        Name = metric.Name.Trim(),
+                        Value = metric.Value,
+                        TrainingRunId = trainingRun.Id
+                    })
+                    .ToList();
+
+                if (metrics.Count > 0)
+                {
+                    _context.TrainingMetrics.AddRange(metrics);
+                    foreach (var metric in metrics)
+                    {
+                        trainingRun.Metrics.Add(metric);
+                    }
+                }
+            }
+
+            await _context.SaveChangesAsync(ct);
+
+            return MapDetailResponse(trainingRun);
+        }
 
         private static TrainingRunDetailResponse MapDetailResponse(
             TrainingRun trainingRun,
@@ -186,11 +303,23 @@ namespace RetailForecast.Services
                 datasetName ?? trainingRun.Dataset.OriginalFileName,
                 trainingRun.ModelId,
                 modelName ?? trainingRun.Model.Name,
+                trainingRun.ExternalJobId,
+                trainingRun.ErrorMessage,
                 featureSource.Select(feature => feature.Name).ToList(),
+                trainingRun.Metrics.Select(MapMetricResponse).ToList(),
                 trainingRun.StartedAt,
                 trainingRun.FinishedAt,
                 trainingRun.CreatedAt,
                 trainingRun.UpdatedAt);
         }
+
+        private static TrainingMetricResponse MapMetricResponse(TrainingMetric metric)
+            => new(
+                metric.Id,
+                metric.Name,
+                metric.Value,
+                metric.TrainingRunId,
+                metric.CreatedAt,
+                metric.UpdatedAt);
     }
 }
