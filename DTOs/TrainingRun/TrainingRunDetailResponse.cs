@@ -1,4 +1,5 @@
 using RetailForecast.DTOs.TrainingMetric;
+using RetailForecast.DTOs.Forecast;
 
 namespace RetailForecast.DTOs.TrainingRun
 {
@@ -14,6 +15,7 @@ namespace RetailForecast.DTOs.TrainingRun
         string? ErrorMessage,
         List<string> FeatureColumns,
         List<TrainingMetricResponse> Metrics,
+        List<ForecastValueResponse> Forecast,
         DateTime StartedAt,
         DateTime? FinishedAt,
         DateTime CreatedAt,

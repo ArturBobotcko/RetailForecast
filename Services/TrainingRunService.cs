@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using RetailForecast.Data;
+using RetailForecast.DTOs.Forecast;
 using RetailForecast.DTOs.TrainingMetric;
 using RetailForecast.DTOs.TrainingRun;
 using RetailForecast.Entities;
@@ -39,6 +40,8 @@ namespace RetailForecast.Services
                 .Include(tr => tr.Model)
                 .Include(tr => tr.Features)
                 .Include(tr => tr.Metrics)
+                .Include(tr => tr.Forecasts)
+                    .ThenInclude(f => f.ForecastValues)
                 .FirstOrDefaultAsync(tr => tr.Id == id && tr.Dataset.UserId == userId, ct);
 
             return trainingRun is null ? null : MapDetailResponse(trainingRun);
@@ -127,6 +130,8 @@ namespace RetailForecast.Services
                 .Include(tr => tr.Model)
                 .Include(tr => tr.Features)
                 .Include(tr => tr.Metrics)
+                .Include(tr => tr.Forecasts)
+                    .ThenInclude(f => f.ForecastValues)
                 .FirstOrDefaultAsync(tr => tr.Id == id && tr.Dataset.UserId == userId, ct);
 
             if (trainingRun is null) return null;
@@ -239,6 +244,8 @@ namespace RetailForecast.Services
                 .Include(tr => tr.Model)
                 .Include(tr => tr.Features)
                 .Include(tr => tr.Metrics)
+                .Include(tr => tr.Forecasts)
+                    .ThenInclude(f => f.ForecastValues)
                 .FirstOrDefaultAsync(tr => tr.Id == id, ct);
 
             if (trainingRun is null)
@@ -257,6 +264,14 @@ namespace RetailForecast.Services
 
             _context.TrainingMetrics.RemoveRange(trainingRun.Metrics);
             trainingRun.Metrics.Clear();
+
+            var existingForecasts = trainingRun.Forecasts.ToList();
+            if (existingForecasts.Count > 0)
+            {
+                _context.ForecastValues.RemoveRange(existingForecasts.SelectMany(forecast => forecast.ForecastValues));
+                _context.Forecasts.RemoveRange(existingForecasts);
+                trainingRun.Forecasts.Clear();
+            }
 
             if (request.Metrics is not null)
             {
@@ -278,6 +293,29 @@ namespace RetailForecast.Services
                         trainingRun.Metrics.Add(metric);
                     }
                 }
+            }
+
+            if (request.Forecast is not null && request.Forecast.Count > 0)
+            {
+                var forecast = new Forecast
+                {
+                    Horizon = request.Forecast.Count,
+                    TrainingRunId = trainingRun.Id
+                };
+
+                foreach (var value in request.Forecast.OrderBy(value => value.Timestamp))
+                {
+                    forecast.ForecastValues.Add(new ForecastValue
+                    {
+                        Timestamp = value.Timestamp.Kind == DateTimeKind.Utc
+                            ? value.Timestamp
+                            : DateTime.SpecifyKind(value.Timestamp, DateTimeKind.Utc),
+                        Value = value.Value
+                    });
+                }
+
+                _context.Forecasts.Add(forecast);
+                trainingRun.Forecasts.Add(forecast);
             }
 
             await _context.SaveChangesAsync(ct);
@@ -307,6 +345,11 @@ namespace RetailForecast.Services
                 trainingRun.ErrorMessage,
                 featureSource.Select(feature => feature.Name).ToList(),
                 trainingRun.Metrics.Select(MapMetricResponse).ToList(),
+                trainingRun.Forecasts
+                    .SelectMany(forecast => forecast.ForecastValues)
+                    .OrderBy(value => value.Timestamp)
+                    .Select(MapForecastValueResponse)
+                    .ToList(),
                 trainingRun.StartedAt,
                 trainingRun.FinishedAt,
                 trainingRun.CreatedAt,
@@ -321,5 +364,10 @@ namespace RetailForecast.Services
                 metric.TrainingRunId,
                 metric.CreatedAt,
                 metric.UpdatedAt);
+
+        private static ForecastValueResponse MapForecastValueResponse(ForecastValue value)
+            => new(
+                value.Timestamp,
+                value.Value);
     }
 }
