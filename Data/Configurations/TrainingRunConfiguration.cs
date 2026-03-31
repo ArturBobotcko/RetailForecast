@@ -14,6 +14,13 @@ namespace RetailForecast.Data.Configurations
                 .IsRequired()
                 .HasMaxLength(255);
 
+            builder.Property(tr => tr.ForecastHorizon)
+                .IsRequired();
+
+            builder.Property(tr => tr.ForecastFrequency)
+                .IsRequired()
+                .HasMaxLength(50);
+
             builder.Property(tr => tr.StartedAt)
                 .IsRequired();
 

@@ -5,6 +5,8 @@ namespace RetailForecast.DTOs.TrainingRun
         int DatasetId,
         string DownloadUrl,
         string CallbackUrl,
+        int ForecastHorizon,
+        string ForecastFrequency,
         string TargetColumn,
         List<string> FeatureColumns,
         MlTrainingModelDto Model

@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using RetailForecast.Data;
 using RetailForecast.DTOs.Forecast;
+using RetailForecast.DTOs.TrainingMetric;
 using RetailForecast.Entities;
-using RetailForecast.Enums;
 
 namespace RetailForecast.Services
 {
@@ -24,6 +24,8 @@ namespace RetailForecast.Services
                 .Include(f => f.TrainingRun)
                     .ThenInclude(tr => tr.Model)
                 .Include(f => f.ForecastValues)
+                .Include(f => f.TrainingRun)
+                    .ThenInclude(tr => tr.Metrics)
                 .Where(f => f.TrainingRun.Dataset.UserId == userId)
                 .OrderByDescending(f => f.CreatedAt)
                 .ToListAsync(ct);
@@ -40,6 +42,8 @@ namespace RetailForecast.Services
                 .Include(f => f.TrainingRun)
                     .ThenInclude(tr => tr.Model)
                 .Include(f => f.ForecastValues)
+                .Include(f => f.TrainingRun)
+                    .ThenInclude(tr => tr.Metrics)
                 .FirstOrDefaultAsync(f => f.Id == id && f.TrainingRun.Dataset.UserId == userId, ct);
 
             if (forecast is null) return null;
@@ -73,6 +77,8 @@ namespace RetailForecast.Services
                 .Include(f => f.TrainingRun)
                     .ThenInclude(tr => tr.Model)
                 .Include(f => f.ForecastValues)
+                .Include(f => f.TrainingRun)
+                    .ThenInclude(tr => tr.Metrics)
                 .FirstOrDefaultAsync(f => f.Id == forecast.Id, ct);
 
             return createdForecast is null ? null : MapResponse(createdForecast);
@@ -102,6 +108,8 @@ namespace RetailForecast.Services
                 .Include(f => f.TrainingRun)
                     .ThenInclude(tr => tr.Model)
                 .Include(f => f.ForecastValues)
+                .Include(f => f.TrainingRun)
+                    .ThenInclude(tr => tr.Metrics)
                 .FirstOrDefaultAsync(f => f.Id == forecast.Id, ct);
 
             return updatedForecast is null ? null : MapResponse(updatedForecast);
@@ -126,6 +134,7 @@ namespace RetailForecast.Services
                 forecast.Id,
                 forecast.Horizon,
                 forecast.TrainingRunId,
+                forecast.TrainingRun.ForecastFrequency,
                 forecast.TrainingRun.Dataset.OriginalFileName,
                 forecast.TrainingRun.Model.Name,
                 forecast.TrainingRun.TargetColumn,
@@ -134,7 +143,20 @@ namespace RetailForecast.Services
                     .OrderBy(value => value.Timestamp)
                     .Select(value => new ForecastValueResponse(value.Timestamp, value.Value))
                     .ToList(),
+                forecast.TrainingRun.Metrics
+                    .OrderBy(metric => metric.Name)
+                    .Select(MapMetricResponse)
+                    .ToList(),
                 forecast.CreatedAt,
                 forecast.UpdatedAt);
+
+        private static TrainingMetricResponse MapMetricResponse(TrainingMetric metric)
+            => new(
+                metric.Id,
+                metric.Name,
+                metric.Value,
+                metric.TrainingRunId,
+                metric.CreatedAt,
+                metric.UpdatedAt);
     }
 }

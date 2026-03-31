@@ -10,6 +10,7 @@ namespace RetailForecast.Services
 {
     public class TrainingRunService
     {
+        private static readonly string[] AllowedForecastFrequencies = ["Auto", "Yearly", "Quarterly"];
         private readonly RetailForecastDbContext _context;
         private readonly MlServiceClient _mlServiceClient;
 
@@ -52,6 +53,11 @@ namespace RetailForecast.Services
         {
             if (string.IsNullOrWhiteSpace(request.TargetColumn) || request.FeatureColumns is null || request.FeatureColumns.Count == 0)
                 throw new ArgumentException("TargetColumn and at least one feature column are required");
+
+            if (request.ForecastHorizon <= 0)
+                throw new ArgumentException("Forecast horizon must be greater than 0");
+
+            var normalizedForecastFrequency = NormalizeForecastFrequency(request.ForecastFrequency);
 
             var dataset = await _context.Datasets
                 .AsNoTracking()
@@ -106,6 +112,8 @@ namespace RetailForecast.Services
             var trainingRun = new TrainingRun
             {
                 TargetColumn = normalizedTargetColumn,
+                ForecastHorizon = request.ForecastHorizon,
+                ForecastFrequency = normalizedForecastFrequency,
                 DatasetId = request.DatasetId,
                 ModelId = request.ModelId,
                 StartedAt = DateTime.UtcNow,
@@ -122,7 +130,11 @@ namespace RetailForecast.Services
         public async Task<TrainingRunDetailResponse?> UpdateAsync(
             int id, int userId, UpdateTrainingRunRequest request, CancellationToken ct = default)
         {
-            if (string.IsNullOrWhiteSpace(request.TargetColumn) && request.FinishedAt is null && string.IsNullOrWhiteSpace(request.Status))
+            if (string.IsNullOrWhiteSpace(request.TargetColumn) &&
+                !request.ForecastHorizon.HasValue &&
+                string.IsNullOrWhiteSpace(request.ForecastFrequency) &&
+                request.FinishedAt is null &&
+                string.IsNullOrWhiteSpace(request.Status))
                 return null;
 
             var trainingRun = await _context.TrainingRuns
@@ -138,6 +150,17 @@ namespace RetailForecast.Services
 
             if (!string.IsNullOrWhiteSpace(request.TargetColumn))
                 trainingRun.TargetColumn = request.TargetColumn.Trim();
+
+            if (request.ForecastHorizon.HasValue)
+            {
+                if (request.ForecastHorizon.Value <= 0)
+                    throw new ArgumentException("Forecast horizon must be greater than 0");
+
+                trainingRun.ForecastHorizon = request.ForecastHorizon.Value;
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.ForecastFrequency))
+                trainingRun.ForecastFrequency = NormalizeForecastFrequency(request.ForecastFrequency);
 
             if (request.FinishedAt.HasValue)
                 trainingRun.FinishedAt = request.FinishedAt;
@@ -169,6 +192,8 @@ namespace RetailForecast.Services
                 trainingRun.Id,
                 trainingRun.Status.ToString(),
                 trainingRun.TargetColumn,
+                trainingRun.ForecastHorizon,
+                trainingRun.ForecastFrequency,
                 trainingRun.DatasetId,
                 trainingRun.Dataset.OriginalFileName,
                 trainingRun.ModelId,
@@ -203,6 +228,8 @@ namespace RetailForecast.Services
                 trainingRun.DatasetId,
                 downloadUrl.Replace("{datasetId}", trainingRun.DatasetId.ToString(), StringComparison.Ordinal),
                 callbackUrl,
+                trainingRun.ForecastHorizon,
+                trainingRun.ForecastFrequency,
                 trainingRun.TargetColumn,
                 trainingRun.Features.Select(feature => feature.Name).ToList(),
                 new MlTrainingModelDto(
@@ -337,6 +364,8 @@ namespace RetailForecast.Services
                 trainingRun.Id,
                 trainingRun.Status.ToString(),
                 trainingRun.TargetColumn,
+                trainingRun.ForecastHorizon,
+                trainingRun.ForecastFrequency,
                 trainingRun.DatasetId,
                 datasetName ?? trainingRun.Dataset.OriginalFileName,
                 trainingRun.ModelId,
@@ -369,5 +398,17 @@ namespace RetailForecast.Services
             => new(
                 value.Timestamp,
                 value.Value);
+
+        private static string NormalizeForecastFrequency(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return "Auto";
+
+            var normalized = value.Trim();
+            var match = AllowedForecastFrequencies.FirstOrDefault(
+                option => string.Equals(option, normalized, StringComparison.OrdinalIgnoreCase));
+
+            return match ?? throw new ArgumentException("Forecast frequency must be Auto, Yearly or Quarterly");
+        }
     }
 }

@@ -4,6 +4,8 @@ namespace RetailForecast.DTOs.TrainingRun
         int Id,
         string Status,
         string TargetColumn,
+        int ForecastHorizon,
+        string ForecastFrequency,
         int DatasetId,
         string DatasetName,
         int ModelId,

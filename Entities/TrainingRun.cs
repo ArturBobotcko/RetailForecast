@@ -5,6 +5,8 @@ namespace RetailForecast.Entities
     public class TrainingRun : BaseEntity
     {
         public required string TargetColumn { get; set; }
+        public int ForecastHorizon { get; set; } = 1;
+        public string ForecastFrequency { get; set; } = "Auto";
         public DateTime StartedAt { get; set; } = DateTime.UtcNow;
         public DateTime? FinishedAt { get; set; }
         public TrainingStatus Status { get; set; } = TrainingStatus.Pending;
