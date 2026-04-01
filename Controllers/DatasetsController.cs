@@ -244,6 +244,38 @@ namespace RetailForecast.Controllers
             }
         }
 
+        [HttpGet("{id}/feature-analysis")]
+        [Authorize]
+        public async Task<IActionResult> GetFeatureAnalysis(int id, CancellationToken ct = default)
+        {
+            try
+            {
+                if (!TryGetCurrentUserId(out var userId))
+                    return Unauthorized(new { message = "Invalid user token" });
+
+                var dataset = await _service.GetByIdAsync(id, userId, ct);
+                if (dataset == null)
+                    return NotFound(new { message = "Dataset not found" });
+
+                if (string.IsNullOrEmpty(dataset.StorageFileName))
+                    return BadRequest(new { message = "No file associated with this dataset" });
+
+                var filePath = _fileStorageService.GetStorageFilePath(dataset.UserId, dataset.StorageFileName);
+                var analysis = _datasetPreviewService.ParseFeatureAnalysis(filePath, dataset.FileExtension, dataset.OriginalFileName);
+
+                return Ok(analysis);
+            }
+            catch (FileNotFoundException)
+            {
+                return NotFound(new { message = "File not found" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting feature analysis");
+                return StatusCode(500, new { message = ex.Message });
+            }
+        }
+
         [HttpDelete("{id}")]
         [Authorize]
         public async Task<IActionResult> Delete(int id, CancellationToken ct)
