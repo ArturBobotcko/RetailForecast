@@ -9,10 +9,17 @@ namespace RetailForecast.Services
     public class ForecastService
     {
         private readonly RetailForecastDbContext _context;
+        private readonly DatasetPreviewService _datasetPreviewService;
+        private readonly FileStorageService _fileStorageService;
 
-        public ForecastService(RetailForecastDbContext context)
+        public ForecastService(
+            RetailForecastDbContext context,
+            DatasetPreviewService datasetPreviewService,
+            FileStorageService fileStorageService)
         {
             _context = context;
+            _datasetPreviewService = datasetPreviewService;
+            _fileStorageService = fileStorageService;
         }
 
         public async Task<List<ForecastResponse>> GetAllAsync(int userId, CancellationToken ct = default)
@@ -129,8 +136,11 @@ namespace RetailForecast.Services
             return true;
         }
 
-        private static ForecastResponse MapResponse(Forecast forecast)
-            => new(
+        private ForecastResponse MapResponse(Forecast forecast)
+        {
+            var (historyValues, dataQuality) = BuildForecastContext(forecast);
+
+            return new(
                 forecast.Id,
                 forecast.Horizon,
                 forecast.TrainingRunId,
@@ -143,12 +153,37 @@ namespace RetailForecast.Services
                     .OrderBy(value => value.Timestamp)
                     .Select(value => new ForecastValueResponse(value.Timestamp, value.Value))
                     .ToList(),
+                historyValues,
                 forecast.TrainingRun.Metrics
                     .OrderBy(metric => metric.Name)
                     .Select(MapMetricResponse)
                     .ToList(),
+                dataQuality,
                 forecast.CreatedAt,
                 forecast.UpdatedAt);
+        }
+
+        private (List<ForecastHistoryPointResponse>, ForecastDataQualityResponse?) BuildForecastContext(Forecast forecast)
+        {
+            var dataset = forecast.TrainingRun.Dataset;
+            if (string.IsNullOrWhiteSpace(dataset.StorageFileName))
+            {
+                return ([], null);
+            }
+
+            try
+            {
+                var filePath = _fileStorageService.GetStorageFilePath(dataset.UserId, dataset.StorageFileName);
+                return _datasetPreviewService.ParseForecastContext(
+                    filePath,
+                    dataset.FileExtension,
+                    forecast.TrainingRun.TargetColumn);
+            }
+            catch
+            {
+                return ([], null);
+            }
+        }
 
         private static TrainingMetricResponse MapMetricResponse(TrainingMetric metric)
             => new(

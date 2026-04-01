@@ -5,6 +5,9 @@ namespace RetailForecast.DTOs.Dataset
         List<string> Columns,
         List<string> NumericColumns,
         Dictionary<string, Dictionary<string, double?>> CorrelationMatrix,
-        List<DatasetFeatureCorrelationResponse> StrongCorrelations
+        List<DatasetFeatureCorrelationResponse> StrongCorrelations,
+        int RowCount,
+        int MissingValueCount,
+        string Summary
     );
 }

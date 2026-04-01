@@ -12,7 +12,9 @@ namespace RetailForecast.DTOs.Forecast
         string TargetColumn,
         string TrainingStatus,
         List<ForecastValueResponse> Values,
+        List<ForecastHistoryPointResponse> HistoryValues,
         List<TrainingMetricResponse> Metrics,
+        ForecastDataQualityResponse? DataQuality,
         DateTime CreatedAt,
         DateTime UpdatedAt
     );

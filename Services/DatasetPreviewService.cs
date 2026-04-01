@@ -1,6 +1,7 @@
 using ExcelDataReader;
 using Microsoft.VisualBasic.FileIO;
 using RetailForecast.DTOs.Dataset;
+using RetailForecast.DTOs.Forecast;
 using System.Globalization;
 
 namespace RetailForecast.Services
@@ -44,13 +45,43 @@ namespace RetailForecast.Services
             var numericColumns = GetNumericColumns(columns, rows);
             var correlationMatrix = BuildCorrelationMatrix(numericColumns, rows, columns);
             var strongCorrelations = BuildStrongCorrelations(correlationMatrix);
+            var missingValueCount = rows.Sum(row => row.Count(string.IsNullOrWhiteSpace));
 
             return new DatasetFeatureAnalysisResponse(
                 fileName,
                 columns,
                 numericColumns,
                 correlationMatrix,
-                strongCorrelations);
+                strongCorrelations,
+                rows.Count,
+                missingValueCount,
+                BuildDataQualitySummary(rows.Count, numericColumns.Count, missingValueCount, strongCorrelations.Count, 1));
+        }
+
+        public (List<ForecastHistoryPointResponse> HistoryValues, ForecastDataQualityResponse DataQuality) ParseForecastContext(
+            string filePath,
+            string fileExtension,
+            string targetColumn)
+        {
+            var (columns, rows) = ParseFileRows(filePath, fileExtension);
+            var numericColumns = GetNumericColumns(columns, rows);
+            var correlationMatrix = BuildCorrelationMatrix(numericColumns, rows, columns);
+            var strongCorrelations = BuildStrongCorrelations(correlationMatrix);
+            var timeColumn = InferTimeColumn(columns);
+            var historyValues = string.IsNullOrWhiteSpace(timeColumn)
+                ? []
+                : BuildHistoryValues(columns, rows, timeColumn!, targetColumn);
+            var missingValueCount = rows.Sum(row => row.Count(string.IsNullOrWhiteSpace));
+
+            return (
+                historyValues,
+                new ForecastDataQualityResponse(
+                    rows.Count,
+                    numericColumns.Count,
+                    missingValueCount,
+                    strongCorrelations.Count,
+                    timeColumn,
+                    BuildDataQualitySummary(rows.Count, numericColumns.Count, missingValueCount, strongCorrelations.Count, historyValues.Count)));
         }
 
         private static (List<string> Columns, List<string[]> Rows) ParseFileRows(string filePath, string fileExtension)
@@ -382,6 +413,20 @@ namespace RetailForecast.Services
             return TimeColumnKeywords.Any(keyword => normalizedColumnName.Contains(keyword, StringComparison.Ordinal));
         }
 
+        private static string? InferTimeColumn(IReadOnlyList<string> columns)
+        {
+            var preferredColumns = new[] { "Год", "Дата", "Year", "Date", "Timestamp", "Period" };
+            var exactMatch = preferredColumns.FirstOrDefault(candidate =>
+                columns.Any(column => string.Equals(column, candidate, StringComparison.OrdinalIgnoreCase)));
+
+            if (!string.IsNullOrWhiteSpace(exactMatch))
+            {
+                return columns.First(column => string.Equals(column, exactMatch, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return columns.FirstOrDefault(IsTimeLikeColumn);
+        }
+
         private static Dictionary<string, Dictionary<string, double?>> BuildCorrelationMatrix(
             IReadOnlyList<string> numericColumns,
             IReadOnlyList<string[]> rows,
@@ -500,6 +545,116 @@ namespace RetailForecast.Services
             }
 
             return numerator / Math.Sqrt(leftDenominator * rightDenominator);
+        }
+
+        private static List<ForecastHistoryPointResponse> BuildHistoryValues(
+            IReadOnlyList<string> columns,
+            IReadOnlyList<string[]> rows,
+            string timeColumn,
+            string targetColumn)
+        {
+            var timeIndex = FindColumnIndex(columns, timeColumn);
+            var targetIndex = FindColumnIndex(columns, targetColumn);
+
+            if (timeIndex < 0 || targetIndex < 0)
+            {
+                return [];
+            }
+
+            var history = new List<ForecastHistoryPointResponse>();
+            foreach (var row in rows)
+            {
+                if (timeIndex >= row.Length || targetIndex >= row.Length)
+                {
+                    continue;
+                }
+
+                if (!TryParseTimeValue(row[timeIndex], out var timestamp) ||
+                    !TryParseNumeric(row[targetIndex], out var targetValue))
+                {
+                    continue;
+                }
+
+                history.Add(new ForecastHistoryPointResponse(timestamp, targetValue));
+            }
+
+            return history
+                .OrderBy(item => item.Timestamp)
+                .TakeLast(12)
+                .ToList();
+        }
+
+        private static int FindColumnIndex(IReadOnlyList<string> columns, string columnName)
+        {
+            for (var index = 0; index < columns.Count; index++)
+            {
+                if (string.Equals(columns[index], columnName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return index;
+                }
+            }
+
+            return -1;
+        }
+
+        private static bool TryParseTimeValue(string value, out DateTime timestamp)
+        {
+            if (DateTime.TryParse(value, CultureInfo.GetCultureInfo("ru-RU"), DateTimeStyles.AssumeUniversal, out timestamp) ||
+                DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out timestamp))
+            {
+                timestamp = DateTime.SpecifyKind(timestamp, DateTimeKind.Utc);
+                return true;
+            }
+
+            if ((int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var year) ||
+                 int.TryParse(value, NumberStyles.Integer, CultureInfo.GetCultureInfo("ru-RU"), out year)) &&
+                year is >= 1900 and <= 3000)
+            {
+                timestamp = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                return true;
+            }
+
+            timestamp = default;
+            return false;
+        }
+
+        private static string BuildDataQualitySummary(
+            int rowCount,
+            int numericColumnCount,
+            int missingValueCount,
+            int strongCorrelationCount,
+            int historyPointCount)
+        {
+            var notes = new List<string>();
+
+            if (rowCount < 20)
+            {
+                notes.Add("Короткий временной ряд");
+            }
+
+            if (missingValueCount > 0)
+            {
+                notes.Add("Есть пропуски");
+            }
+
+            if (strongCorrelationCount > 3)
+            {
+                notes.Add("Много сильно связанных признаков");
+            }
+
+            if (numericColumnCount < 3)
+            {
+                notes.Add("Мало числовых признаков");
+            }
+
+            if (historyPointCount == 0)
+            {
+                notes.Add("История для графика не найдена");
+            }
+
+            return notes.Count > 0
+                ? string.Join(" · ", notes)
+                : "Данные выглядят пригодными для обучения";
         }
 
         private static bool TryParseNumeric(string value, out double result)
